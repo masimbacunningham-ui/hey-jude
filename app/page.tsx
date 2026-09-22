@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -16,8 +17,19 @@ interface Account {
   currency: string;
 }
 
+interface Transaction {
+  id: number;
+  account_id: string;
+  type: string;
+  transaction_type?: string;
+  amount: number;
+  description: string;
+  created_at: string;
+}
+
 export default function Home() {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Form State
@@ -27,7 +39,7 @@ export default function Home() {
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch Accounts cleanly
+  // Fetch Accounts
   const fetchAccounts = async () => {
     const { data, error } = await supabase.from('accounts').select('*');
     if (!error && data) {
@@ -35,14 +47,30 @@ export default function Home() {
       if (data.length > 0 && !selectedAccountId) {
         setSelectedAccountId(data[0].id);
       }
-    } else if (error) {
-      console.error('Error fetching accounts:', error.message);
     }
+  };
+
+  // Fetch Recent Transactions
+  const fetchTransactions = async () => {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (!error && data) {
+      setTransactions(data);
+    }
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    await Promise.all([fetchAccounts(), fetchTransactions()]);
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchAccounts();
+    loadData();
   }, []);
 
   // Submit Transaction
@@ -63,11 +91,17 @@ export default function Home() {
     if (!error) {
       setAmount('');
       setDescription('');
-      await fetchAccounts(); // Instantly refresh account balances
+      await Promise.all([fetchAccounts(), fetchTransactions()]); // Refresh balances and recent list
     } else {
       alert('Error saving transaction: ' + error.message);
     }
     setSubmitting(false);
+  };
+
+  // Helper to find account name by ID
+  const getAccountName = (id: string) => {
+    const acc = accounts.find((a) => a.id === id);
+    return acc ? (acc.account_name || acc.name) : 'Account';
   };
 
   return (
@@ -165,6 +199,34 @@ export default function Home() {
             {submitting ? 'Saving...' : 'Add Transaction'}
           </button>
         </form>
+      </section>
+
+      {/* Recent Transactions Feed */}
+      <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+        <h2 className="text-xl font-semibold text-gray-800">Recent Activity</h2>
+        {transactions.length === 0 ? (
+          <p className="text-gray-500 text-sm">No transactions logged yet.</p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {transactions.map((tx) => {
+              const txType = tx.type || tx.transaction_type;
+              const isIncome = txType === 'income';
+              return (
+                <div key={tx.id} className="py-3 flex justify-between items-center text-sm">
+                  <div>
+                    <p className="font-medium text-gray-900">{tx.description || 'Transaction'}</p>
+                    <p className="text-xs text-gray-500">
+                      {getAccountName(tx.account_id)} • {new Date(tx.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <span className={`font-semibold ${isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {isIncome ? '+' : '-'} ZAR {Number(tx.amount).toFixed(2)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
     </main>
   );
