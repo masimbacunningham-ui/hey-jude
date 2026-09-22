@@ -1,4 +1,3 @@
-import './globals.css';
 
 export const metadata = {
   title: 'Hey Jude - Shared Household Assistant',
@@ -15,7 +14,9 @@ export default function RootLayout({
       <head>
         <script src="https://cdn.tailwindcss.com"></script>
       </head>
-      <body className="bg-gray-50 min-h-screen antialiased">{children}</body>
+      <body className="bg-gray-50 min-h-screen antialiased">
+        {children}
+      </body>
     </html>
   );
 }
