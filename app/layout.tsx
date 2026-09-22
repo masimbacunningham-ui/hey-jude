@@ -1,8 +1,8 @@
-import React from 'react';
+import './globals.css';
 
 export const metadata = {
-  title: 'Hey Jude',
-  description: 'Shared Household Financial Assistant',
+  title: 'Hey Jude - Shared Household Assistant',
+  description: 'Track household balances and expenses',
 };
 
 export default function RootLayout({
@@ -12,9 +12,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, padding: 0, fontFamily: 'sans-serif' }}>
-        {children}
-      </body>
+      <head>
+        <script src="https://cdn.tailwindcss.com"></script>
+      </head>
+      <body className="bg-gray-50 min-h-screen antialiased">{children}</body>
     </html>
   );
 }
