@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -9,7 +8,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface Account {
-  id: string; // Updated to string for UUID matching
+  id: string;
   account_name: string;
   name?: string;
   owner: string;
@@ -28,14 +27,16 @@ export default function Home() {
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch Accounts
+  // Fetch Accounts cleanly
   const fetchAccounts = async () => {
-    const { data, error } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
+    const { data, error } = await supabase.from('accounts').select('*');
     if (!error && data) {
       setAccounts(data);
       if (data.length > 0 && !selectedAccountId) {
         setSelectedAccountId(data[0].id);
       }
+    } else if (error) {
+      console.error('Error fetching accounts:', error.message);
     }
     setLoading(false);
   };
@@ -52,7 +53,7 @@ export default function Home() {
     setSubmitting(true);
     const { error } = await supabase.from('transactions').insert([
       {
-        account_id: selectedAccountId, // Send full UUID string
+        account_id: selectedAccountId,
         type,
         amount: parseFloat(amount),
         description,
