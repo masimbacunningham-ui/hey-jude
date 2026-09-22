@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,7 +9,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface Account {
-  id: number;
+  id: string; // Updated to string for UUID matching
   account_name: string;
   name?: string;
   owner: string;
@@ -21,7 +22,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   
   // Form State
-  const [selectedAccountId, setSelectedAccountId] = useState<number | ''>('');
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -29,7 +30,7 @@ export default function Home() {
 
   // Fetch Accounts
   const fetchAccounts = async () => {
-    const { data, error } = await supabase.from('accounts').select('*').order('id');
+    const { data, error } = await supabase.from('accounts').select('*').order('created_at', { ascending: true });
     if (!error && data) {
       setAccounts(data);
       if (data.length > 0 && !selectedAccountId) {
@@ -51,7 +52,7 @@ export default function Home() {
     setSubmitting(true);
     const { error } = await supabase.from('transactions').insert([
       {
-        account_id: Number(selectedAccountId),
+        account_id: selectedAccountId, // Send full UUID string
         type,
         amount: parseFloat(amount),
         description,
@@ -61,7 +62,7 @@ export default function Home() {
     if (!error) {
       setAmount('');
       setDescription('');
-      await fetchAccounts(); // Refresh balances immediately
+      await fetchAccounts(); // Instantly refresh account balances
     } else {
       alert('Error saving transaction: ' + error.message);
     }
@@ -105,8 +106,8 @@ export default function Home() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Account</label>
             <select
               value={selectedAccountId}
-              onChange={(e) => setSelectedAccountId(Number(e.target.value))}
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
               required
             >
               {accounts.map((acc) => (
@@ -123,7 +124,7 @@ export default function Home() {
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as 'income' | 'expense')}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
               >
                 <option value="expense">Expense (-)</option>
                 <option value="income">Income (+)</option>
@@ -138,7 +139,7 @@ export default function Home() {
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
                 required
               />
             </div>
@@ -151,7 +152,7 @@ export default function Home() {
               placeholder="e.g. Groceries, Fuel, Airtime"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
             />
           </div>
 
