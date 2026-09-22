@@ -91,7 +91,7 @@ export default function Home() {
     if (!selectedAccountId || !amount) return;
 
     setSubmitting(true);
-    const { error } = await supabase.from('transactions'].insert([
+    const { error } = await supabase.from('transactions').insert([
       {
         account_id: selectedAccountId,
         type,
