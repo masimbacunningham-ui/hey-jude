@@ -24,8 +24,19 @@ interface Transaction {
   transaction_type?: string;
   amount: number;
   description: string;
+  category?: string;
   created_at: string;
 }
+
+const CATEGORIES = [
+  'Groceries',
+  'Transport & Fuel',
+  'Utilities & Airtime',
+  'Rent & Housing',
+  'Dining & Leisure',
+  'Savings & Transfer',
+  'General'
+];
 
 export default function Home() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -36,6 +47,7 @@ export default function Home() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState(CATEGORIES[0]);
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -79,11 +91,12 @@ export default function Home() {
     if (!selectedAccountId || !amount) return;
 
     setSubmitting(true);
-    const { error } = await supabase.from('transactions').insert([
+    const { error } = await supabase.from('transactions'].insert([
       {
         account_id: selectedAccountId,
         type,
         amount: parseFloat(amount),
+        category,
         description,
       },
     ]);
@@ -91,14 +104,14 @@ export default function Home() {
     if (!error) {
       setAmount('');
       setDescription('');
-      await Promise.all([fetchAccounts(), fetchTransactions()]); // Refresh balances and recent list
+      setCategory(CATEGORIES[0]);
+      await Promise.all([fetchAccounts(), fetchTransactions()]);
     } else {
       alert('Error saving transaction: ' + error.message);
     }
     setSubmitting(false);
   };
 
-  // Helper to find account name by ID
   const getAccountName = (id: string) => {
     const acc = accounts.find((a) => a.id === id);
     return acc ? (acc.account_name || acc.name) : 'Account';
@@ -181,10 +194,25 @@ export default function Home() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
+            >
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
             <input
               type="text"
-              placeholder="e.g. Groceries, Fuel, Airtime"
+              placeholder="e.g. Woolworths shopping, Engen fuel"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
@@ -214,9 +242,14 @@ export default function Home() {
               return (
                 <div key={tx.id} className="py-3 flex justify-between items-center text-sm">
                   <div>
-                    <p className="font-medium text-gray-900">{tx.description || 'Transaction'}</p>
+                    <p className="font-medium text-gray-900">
+                      {tx.description ? tx.description : (tx.category || 'General')}
+                    </p>
                     <p className="text-xs text-gray-500">
-                      {getAccountName(tx.account_id)} • {new Date(tx.created_at).toLocaleDateString()}
+                      <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-medium mr-1">
+                        {tx.category || 'General'}
+                      </span> 
+                      • {getAccountName(tx.account_id)} • {new Date(tx.created_at).toLocaleDateString()}
                     </p>
                   </div>
                   <span className={`font-semibold ${isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
