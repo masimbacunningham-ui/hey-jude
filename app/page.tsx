@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -681,7 +682,6 @@ export default function Home() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">To Account</label>
                   <select
                     value={destinationAccountId}
-                    onChange={(e) => setSelectedAccountId(e.target.value)} // wait, correction: destinationAccountId
                     onChange={(e) => setDestinationAccountId(e.target.value)}
                     className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
                     required
