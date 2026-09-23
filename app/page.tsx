@@ -16,9 +16,17 @@ interface Account {
   currency: string;
 }
 
+interface Project {
+  id: string;
+  project_name: string;
+  target_budget: number;
+  currency: string;
+}
+
 interface Transaction {
   id: number;
   account_id: string;
+  project_id?: string | null;
   type: string;
   transaction_type?: string;
   amount: number;
@@ -43,11 +51,18 @@ const CATEGORIES = [
   'Dining & Leisure',
   'Savings & Transfer',
   'Debt & Loans',
+  // Mahusekwa Farm Project Categories
+  'Infrastructure & Construction',
+  'Protected Agriculture (Greenhouses)',
+  'Livestock & Piggery/Poultry',
+  'Off-Grid Utilities (Solar & Water)',
+  'Labor & Management',
   'General'
 ];
 
 export default function Home() {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +71,7 @@ export default function Home() {
   const [actionType, setActionType] = useState<'standard' | 'transfer'>('standard');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [destinationAccountId, setDestinationAccountId] = useState<string>('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('none');
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
@@ -89,6 +105,13 @@ export default function Home() {
     }
   };
 
+  const fetchProjects = async () => {
+    const { data, error } = await supabase.from('projects').select('*');
+    if (!error && data) {
+      setProjects(data);
+    }
+  };
+
   const fetchTransactions = async () => {
     const { data, error } = await supabase
       .from('transactions')
@@ -110,7 +133,7 @@ export default function Home() {
 
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([fetchAccounts(), fetchTransactions(), fetchLoans()]);
+    await Promise.all([fetchAccounts(), fetchProjects(), fetchTransactions(), fetchLoans()]);
     setLoading(false);
   };
 
@@ -168,6 +191,7 @@ export default function Home() {
       const { error } = await supabase.from('transactions').insert([
         {
           account_id: selectedAccountId,
+          project_id: selectedProjectId === 'none' ? null : selectedProjectId,
           type,
           amount: parseFloat(amount),
           category,
@@ -179,6 +203,7 @@ export default function Home() {
         setAmount('');
         setDescription('');
         setCategory(CATEGORIES[0]);
+        setSelectedProjectId('none');
         await loadData();
       } else {
         alert('Error saving transaction: ' + error.message);
@@ -254,6 +279,12 @@ export default function Home() {
     return acc ? (acc.account_name || acc.name) : 'Account';
   };
 
+  const getProjectName = (id: string | null | undefined) => {
+    if (!id) return null;
+    const proj = projects.find((p) => p.id === id);
+    return proj ? proj.project_name : null;
+  };
+
   // Monthly Summary Calculations
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
@@ -273,6 +304,14 @@ export default function Home() {
 
   const netMonthlyCashflow = totalMonthlyIncome - totalMonthlyExpenses;
 
+  // Project Totals Calculation
+  const mahusekwaProject = projects.find(p => p.project_name.toLowerCase().includes('mahusekwa'));
+  const mahusekwaSpent = transactions
+    .filter(tx => tx.project_id === mahusekwaProject?.id && (tx.type || tx.transaction_type) === 'expense')
+    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+  const mahusekwaBudget = mahusekwaProject ? Number(mahusekwaProject.target_budget) : 0;
+  const mahusekwaProgress = mahusekwaBudget > 0 ? Math.min(100, Math.round((mahusekwaSpent / mahusekwaBudget) * 100)) : 0;
+
   const filteredTransactions = selectedCategoryFilter === 'All'
     ? transactions
     : transactions.filter(tx => (tx.category || 'General') === selectedCategoryFilter);
@@ -281,7 +320,7 @@ export default function Home() {
     <main className="max-w-2xl mx-auto p-6 space-y-8 font-sans">
       <header>
         <h1 className="text-3xl font-bold text-gray-900">Hey Jude</h1>
-        <p className="text-gray-600">Shared Household Financial Assistant</p>
+        <p className="text-gray-600">Shared Household & Farm Financial Assistant</p>
       </header>
 
       {/* Monthly Summary Bar */}
@@ -306,6 +345,34 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Mahusekwa Farm Project Tracker */}
+      {mahusekwaProject && (
+        <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-800">🌱 {mahusekwaProject.project_name}</h2>
+              <p className="text-xs text-gray-500">Capital Expenditure & Development Tracking</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-bold text-gray-900">Budget: {mahusekwaProject.currency} {mahusekwaBudget.toLocaleString()}</p>
+              <p className="text-xs text-emerald-600 font-medium">Spent: {mahusekwaProject.currency} {mahusekwaSpent.toLocaleString()} ({mahusekwaProgress}%)</p>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
+            <div 
+              className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500" 
+              style={{ width: `${mahusekwaProgress}%` }}
+            ></div>
+          </div>
+          <div className="flex justify-between text-xs text-gray-500">
+            <span>Remaining Budget: {mahusekwaProject.currency} {Math.max(0, mahusekwaBudget - mahusekwaSpent).toLocaleString()}</span>
+            <span>{mahusekwaProgress}% Utilized</span>
+          </div>
+        </section>
+      )}
 
       {/* Live Account Balances Card */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
@@ -342,7 +409,6 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Add Loan Inline Form */}
         {showAddLoanForm && (
           <form onSubmit={handleCreateLoan} className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 space-y-3">
             <h3 className="text-sm font-semibold text-indigo-900">Add New Loan / Debt</h3>
@@ -392,7 +458,7 @@ export default function Home() {
         )}
 
         {loans.length === 0 ? (
-          <p className="text-gray-500 text-sm py-2">No active loans tracked. Click &quot;+ Add Loan&quot; above to add your car loan or other debts!</p>
+          <p className="text-gray-500 text-sm py-2">No active loans tracked.</p>
         ) : (
           <div className="space-y-6">
             {loans.map((loan) => {
@@ -414,7 +480,6 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Progress Bar */}
                   <div className="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
                     <div 
                       className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500" 
@@ -422,7 +487,6 @@ export default function Home() {
                     ></div>
                   </div>
 
-                  {/* Payment Action */}
                   {payingLoanId === loan.id ? (
                     <div className="pt-3 border-t border-gray-200 space-y-3">
                       <div className="grid grid-cols-2 gap-3">
@@ -518,20 +582,38 @@ export default function Home() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {actionType === 'standard' ? (
             <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Account</label>
-                <select
-                  value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
-                  required
-                >
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.account_name || acc.name} ({acc.owner})
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Account</label>
+                  <select
+                    value={selectedAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
+                    required
+                  >
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.account_name || acc.name} ({acc.owner})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Project Link (Optional)</label>
+                  <select
+                    value={selectedProjectId}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
+                  >
+                    <option value="none">None (Household)</option>
+                    {projects.map((proj) => (
+                      <option key={proj.id} value={proj.id}>
+                        {proj.project_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -599,6 +681,7 @@ export default function Home() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">To Account</label>
                   <select
                     value={destinationAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)} // wait, correction: destinationAccountId
                     onChange={(e) => setDestinationAccountId(e.target.value)}
                     className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
                     required
@@ -631,7 +714,7 @@ export default function Home() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
             <input
               type="text"
-              placeholder={actionType === 'standard' ? "e.g. Woolworths shopping" : "e.g. Monthly savings allocation"}
+              placeholder={actionType === 'standard' ? "e.g. Greenhouse shade netting & poles" : "e.g. Monthly savings allocation"}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
@@ -690,17 +773,23 @@ export default function Home() {
             {filteredTransactions.map((tx) => {
               const txType = tx.type || tx.transaction_type;
               const isIncome = txType === 'income';
+              const projName = getProjectName(tx.project_id);
               return (
                 <div key={tx.id} className="py-3 flex justify-between items-center text-sm">
                   <div>
                     <p className="font-medium text-gray-900">
                       {tx.description ? tx.description : (tx.category || 'General')}
                     </p>
-                    <p className="text-xs text-gray-500">
-                      <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-medium mr-1">
+                    <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
+                      <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-medium">
                         {tx.category || 'General'}
                       </span> 
-                      • {getAccountName(tx.account_id)} • {new Date(tx.created_at).toLocaleDateString()}
+                      {projName && (
+                        <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium border border-emerald-200">
+                          🌱 {projName}
+                        </span>
+                      )}
+                      <span>• {getAccountName(tx.account_id)} • {new Date(tx.created_at).toLocaleDateString()}</span>
                     </p>
                   </div>
                   <span className={`font-semibold ${isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
