@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -28,6 +27,14 @@ interface Transaction {
   created_at: string;
 }
 
+interface Loan {
+  id: string;
+  loan_name: string;
+  total_amount: number;
+  paid_amount: number;
+  currency: string;
+}
+
 const CATEGORIES = [
   'Groceries',
   'Transport & Fuel',
@@ -35,12 +42,14 @@ const CATEGORIES = [
   'Rent & Housing',
   'Dining & Leisure',
   'Savings & Transfer',
+  'Debt & Loans',
   'General'
 ];
 
 export default function Home() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Form State
@@ -56,7 +65,12 @@ export default function Home() {
   // Filter State
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('All');
 
-  // Fetch Accounts
+  // Loan Payment Modal/Input State
+  const [payingLoanId, setPayingLoanId] = useState<string | null>(null);
+  const [loanPaymentAmount, setLoanPaymentAmount] = useState('');
+  const [loanPaymentAccountId, setLoanPaymentAccountId] = useState<string>('');
+
+  // Fetch Data
   const fetchAccounts = async () => {
     const { data, error } = await supabase.from('accounts').select('*');
     if (!error && data) {
@@ -64,11 +78,11 @@ export default function Home() {
       if (data.length > 0) {
         if (!selectedAccountId) setSelectedAccountId(data[0].id);
         if (!destinationAccountId && data.length > 1) setDestinationAccountId(data[1].id);
+        if (!loanPaymentAccountId) setLoanPaymentAccountId(data[0].id);
       }
     }
   };
 
-  // Fetch Transactions
   const fetchTransactions = async () => {
     const { data, error } = await supabase
       .from('transactions')
@@ -81,9 +95,16 @@ export default function Home() {
     }
   };
 
+  const fetchLoans = async () => {
+    const { data, error } = await supabase.from('loans').select('*');
+    if (!error && data) {
+      setLoans(data);
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([fetchAccounts(), fetchTransactions()]);
+    await Promise.all([fetchAccounts(), fetchTransactions(), fetchLoans()]);
     setLoading(false);
   };
 
@@ -135,7 +156,7 @@ export default function Home() {
       } else {
         setAmount('');
         setDescription('');
-        await Promise.all([fetchAccounts(), fetchTransactions()]);
+        await loadData();
       }
     } else {
       const { error } = await supabase.from('transactions').insert([
@@ -152,13 +173,51 @@ export default function Home() {
         setAmount('');
         setDescription('');
         setCategory(CATEGORIES[0]);
-        await Promise.all([fetchAccounts(), fetchTransactions()]);
+        await loadData();
       } else {
         alert('Error saving transaction: ' + error.message);
       }
     }
 
     setSubmitting(false);
+  };
+
+  // Handle Loan Payment
+  const handleLoanPayment = async (loan: Loan) => {
+    const payment = parseFloat(loanPaymentAmount);
+    if (!payment || payment <= 0) return;
+
+    const newPaidAmount = Number(loan.paid_amount) + payment;
+
+    // 1. Update Loan paid_amount in Supabase
+    const { error: loanError } = await supabase
+      .from('loans')
+      .update({ paid_amount: newPaidAmount })
+      .eq('id', loan.id);
+
+    if (loanError) {
+      alert('Error updating loan: ' + loanError.message);
+      return;
+    }
+
+    // 2. Log expense transaction for the payment
+    const { error: txError } = await supabase.from('transactions').insert([
+      {
+        account_id: loanPaymentAccountId || accounts[0]?.id,
+        type: 'expense',
+        amount: payment,
+        category: 'Debt & Loans',
+        description: `Loan payment for ${loan.loan_name}`,
+      },
+    ]);
+
+    if (txError) {
+      alert('Loan updated, but error logging transaction: ' + txError.message);
+    }
+
+    setPayingLoanId(null);
+    setLoanPaymentAmount('');
+    await loadData();
   };
 
   const getAccountName = (id: string) => {
@@ -220,7 +279,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Account Balances Card */}
+      {/* Live Account Balances Card */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
         <h2 className="text-xl font-semibold text-gray-800">Live Account Balances</h2>
         {loading ? (
@@ -238,6 +297,109 @@ export default function Home() {
                 </span>
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      {/* Debt & Loan Tracker Card */}
+      <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+        <h2 className="text-xl font-semibold text-gray-800">Debts & Loans Tracker</h2>
+        {loans.length === 0 ? (
+          <p className="text-gray-500 text-sm">No active loans tracked.</p>
+        ) : (
+          <div className="space-y-6">
+            {loans.map((loan) => {
+              const total = Number(loan.total_amount);
+              const paid = Number(loan.paid_amount);
+              const remaining = Math.max(0, total - paid);
+              const progressPercent = Math.min(100, Math.round((paid / total) * 100));
+
+              return (
+                <div key={loan.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{loan.loan_name}</h3>
+                      <p className="text-xs text-gray-500">Total Loan: {loan.currency} {total.toLocaleString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-rose-600">Left: {loan.currency} {remaining.toLocaleString()}</p>
+                      <p className="text-xs text-emerald-600 font-medium">Paid: {loan.currency} {paid.toLocaleString()} ({progressPercent}%)</p>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500" 
+                      style={{ width: `${progressPercent}%` }}
+                    ></div>
+                  </div>
+
+                  {/* Payment Action */}
+                  {payingLoanId === loan.id ? (
+                    <div className="pt-3 border-t border-gray-200 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Payment Amount</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={loanPaymentAmount}
+                            onChange={(e) => setLoanPaymentAmount(e.target.value)}
+                            className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                            autoFocus
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Pay From Account</label>
+                          <select
+                            value={loanPaymentAccountId}
+                            onChange={(e) => setLoanPaymentAccountId(e.target.value)}
+                            className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                          >
+                            {accounts.map((acc) => (
+                              <option key={acc.id} value={acc.id}>
+                                {acc.account_name || acc.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => handleLoanPayment(loan)}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium py-2 rounded-lg transition-colors"
+                        >
+                          Confirm & Pay
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPayingLoanId(null)}
+                          className="px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-medium py-2 rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPayingLoanId(loan.id);
+                          setLoanPaymentAmount('');
+                        }}
+                        className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        + Log Loan Payment
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
