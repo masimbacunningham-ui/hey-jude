@@ -30,6 +30,7 @@ export function AppShell() {
   const [household, setHousehold] = useState<Household|null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [txs, setTxs] = useState<Tx[]>([]);
+  const [projects, setProjects] = useState<any[]>([]); // <--- Add this line here!
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [authMode, setAuthMode] = useState<"signin"|"signup">("signin");
@@ -47,36 +48,33 @@ export function AppShell() {
     });
     return () => listener.subscription.unsubscribe();
   }, [supabase]);
+async function createHousehold(name: string) {
+  const { data, error } = await supabase.rpc("create_household", { name });
+  if (error) return setMessage(error.message);
+  setMessage("Household created. Share the join code with Lynn");
+}
 
-  async function loadHousehold(userId:string) {
-    setLoading(true);
-    const {data: member} = await supabase.from("household_members")
-      .select("household_id").eq("user_id", userId).limit(1).maybeSingle();
-    if (!member) { setLoading(false); return; }
-    const {data:h} = await supabase.from("households").select("*").eq("id", member.household_id).single();
-    const {data:p} = await supabase.from("household_members").select("user_id, profiles!inner(first_name)").eq("household_id", member.household_id);
-    const {data:t} = await supabase.from("transactions").select("*")
-      .eq("household_id", member.household_id).order("transaction_date",{ascending:false}).limit(300);
-    setHousehold(h);
-    setPeople((p||[]).map((x:any)=>({id:x.user_id,name:x.profiles?.first_name || "Member"})));
-    setTxs((t||[]) as Tx[]);
-    setLoading(false);
-  }
+async function loadHousehold(userId: string) {
+  setLoading(true);
+  const { data: member } = await supabase.from("household_member").select("household_id").eq("user_id", userId).limit(1).maybeSingle();
+  if (!member) { setLoading(false); return; }
 
-  async function createHousehold(name:string) {
-    const {data,error} = await supabase.rpc("create_household", {p_name:name});
-    if (error) return setMessage(error.message);
-    setMessage("Household created. Share the join code with Lynne.");
-    await loadHousehold(session.user.id);
-  }
+  const { data: h } = await supabase.from("households").select("*").eq("id", member.household_id).single();
+  setHousehold(h);
 
-  async function joinHousehold(code:string) {
-    const {error} = await supabase.rpc("join_household", {p_join_code:code.trim().toUpperCase()});
-    if (error) return setMessage(error.message);
-    setMessage("Joined household.");
-    await loadHousehold(session.user.id);
-  }
+  const { data: projs } = await supabase.from("projects").select("*").eq("household_id", member.household_id);
+  setProjects(projs || []);
 
+  const { data: t } = await supabase.from("transactions").select(`
+      *,
+      profiles:created_by (full_name)
+    `)
+    .eq("household_id", member.household_id)
+    .order("transaction_date", { ascending: false });
+  setTxs((t || []) as Tx[]);
+
+  setLoading(false);
+}
   async function addTransaction(input:Partial<Tx> & { receiptFile?: File | null }) {
     if (!household) return;
     let receipt_path: string | null = null;
@@ -115,8 +113,8 @@ export function AppShell() {
 
       <main className="content">
         {message && <button className="notice" onClick={()=>setMessage("")}>{message} ×</button>}
-        {tab==="home" && <Dashboard txs={txs} people={people} household={household}/>}
-        {tab==="capture" && <Capture people={people} onSave={addTransaction}/>}
+       {tab==="capture" && <Capture people={people} projects={projects} onSave={addTransaction}/>}
+     
         {tab==="transactions" && <Transactions txs={txs} people={people}/>}
         {tab==="zimbabwe" && <Zimbabwe txs={txs} onSave={addTransaction}/>}
         {tab==="assistant" && <Assistant txs={txs} household={household}/>}
@@ -208,23 +206,130 @@ function Dashboard({txs,people,household}:{txs:Tx[],people:Person[],household:Ho
 }
 
 function Stat({label,value,tone}:{label:string,value:string,tone:string}) { return <div className={`stat ${tone}`}><small>{label}</small><b>{value}</b></div> }
-function TxRow({t}:{t:Tx}) { return <div className="tx"><div className="txIcon">{t.project==="Zimbabwe"?"🇿🇼":t.type==="income"?"↑":"↓"}</div><div className="txMain"><b>{t.description}</b><small>{t.category} · {t.transaction_date}</small></div><strong className={t.type==="income"?"income":"expense"}>{t.type==="income"?"+":"−"}{money(t.amount)}</strong></div> }
+function TxRow({ t }: { t: any }) {
+  return (
+    <div className="tx flex items-center justify-between p-3 border-b border-slate-100 dark:border-slate-800">
+      <div className="flex items-center gap-3">
+        <div>
+          <div className="font-medium text-slate-900 dark:text-white">{t.description || t.category}</div>
+          <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+            <span>{t.transaction_date}</span>
+            {t.project && (
+              <span className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded text-[10px] font-semibold">
+                {t.project}
+              </span>
+            )}
+            {t.profiles?.full_name && (
+              <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                {t.profiles.full_name}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className={`font-semibold ${t.type === "income" ? "text-emerald-600" : "text-slate-900 dark:text-white"}`}>
+        {t.type === "income" ? "+" : "-"}{money(t.amount)}
+      </div>
+    </div>
+  );
+}
 
-function Capture({people,onSave}:{people:Person[],onSave:(x:Partial<Tx> & {receiptFile?:File|null})=>void}) {
-  const [file,setFile]=useState<File|null>(null); const [preview,setPreview]=useState(""); const [busy,setBusy]=useState(false);
-  const [listening,setListening]=useState(false);
-  const [form,setForm]=useState<any>({type:"expense",amount:"",description:"",category:"Other",project:"",account_name:""});
-  const input=useRef<HTMLInputElement>(null);
-  async function scan(f:File) {
+
+  function Capture({ people, projects = [], onSave }: { people: Person[], projects: any[], onSave: (x: Partial<Tx>) => void }) {
+  const [form, setForm] = useState<any>({ type: "expense", amount: "", category: "Groceries", description: "", project: "" });
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function scan(f: File) {
     setFile(f); setPreview(URL.createObjectURL(f)); setBusy(true);
-    const fd=new FormData(); fd.append("receipt",f);
+    const fd = new FormData(); fd.append("receipt", f);
     try {
-      const r=await fetch("/api/receipt",{method:"POST",body:fd}); const data=await r.json();
-      if(data.receipt) setForm((x:any)=>({...x,...data.receipt, amount:data.receipt.amount ?? ""}));
-      else if(data.error) alert(data.error);
+      const r = await fetch("/api/receipt", {method: "POST", body: fd}); const data = await r.json();
+      if (data.receipt) setForm((x: any) => ({...x, ...data.receipt, amount: data.receipt.amount ?? ""}));
+      else if (data.error) alert(data.error);
     } catch { alert("Receipt scan failed. You can enter it manually."); }
     setBusy(false);
   }
+
+  return (
+    <div className="card p-4 space-y-4 bg-white dark:bg-slate-900 rounded-xl shadow-sm">
+      <h3 className="font-semibold text-lg text-slate-900 dark:text-white">Log Transaction</h3>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-xs font-medium text-slate-500">Type</label>
+          <select 
+            className="w-full mt-1 p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
+            value={form.type} 
+            onChange={e => setForm({...form, type: e.target.value})}
+          >
+            <option value="expense">Expense (-)</option>
+            <option value="income">Income (+)</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-slate-500">Project Link</label>
+          <select 
+            className="w-full mt-1 p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
+            value={form.project} 
+            onChange={e => setForm({...form, project: e.target.value})}
+          >
+            <option value="">None (Household)</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.name}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-slate-500">Amount</label>
+        <input 
+          type="number" 
+          placeholder="0.00" 
+          className="w-full mt-1 p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
+          value={form.amount} 
+          onChange={e => setForm({...form, amount: e.target.value})} 
+        />
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-slate-500">Category</label>
+        <select 
+          className="w-full mt-1 p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
+          value={form.category} 
+          onChange={e => setForm({...form, category: e.target.value})}
+        >
+          <option value="Groceries">Groceries</option>
+          <option value="Utilities">Utilities</option>
+          <option value="Transport">Transport</option>
+          <option value="Farming & Operations">Farming & Operations</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-slate-500">Description (Optional)</label>
+        <input 
+          type="text" 
+          placeholder="e.g. Solar inverter & batteries" 
+          className="w-full mt-1 p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
+          value={form.description} 
+          onChange={e => setForm({...form, description: e.target.value})} 
+        />
+      </div>
+
+      <button 
+        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition"
+        onClick={() => onSave(form)}
+      >
+        Add Transaction
+      </button>
+    </div>
+  );
+}
   function speak() {
     const SR=(window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if(!SR) return alert("Voice entry is not supported by this browser. Use Safari/Chrome on a supported iPhone.");
