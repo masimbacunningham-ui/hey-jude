@@ -44,7 +44,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   
   // Form State
+  const [actionType, setActionType] = useState<'standard' | 'transfer'>('standard');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
+  const [destinationAccountId, setDestinationAccountId] = useState<string>('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
@@ -56,8 +58,9 @@ export default function Home() {
     const { data, error } = await supabase.from('accounts').select('*');
     if (!error && data) {
       setAccounts(data);
-      if (data.length > 0 && !selectedAccountId) {
-        setSelectedAccountId(data[0].id);
+      if (data.length > 0) {
+        if (!selectedAccountId) setSelectedAccountId(data[0].id);
+        if (!destinationAccountId && data.length > 1) setDestinationAccountId(data[1].id);
       }
     }
   };
@@ -85,30 +88,76 @@ export default function Home() {
     loadData();
   }, []);
 
-  // Submit Transaction
+  // Submit Transaction or Transfer
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAccountId || !amount) return;
 
     setSubmitting(true);
-    const { error } = await supabase.from('transactions').insert([
-      {
-        account_id: selectedAccountId,
-        type,
-        amount: parseFloat(amount),
-        category,
-        description,
-      },
-    ]);
 
-    if (!error) {
-      setAmount('');
-      setDescription('');
-      setCategory(CATEGORIES[0]);
-      await Promise.all([fetchAccounts(), fetchTransactions()]);
+    if (actionType === 'transfer') {
+      if (!destinationAccountId || selectedAccountId === destinationAccountId) {
+        alert('Please select a different destination account for the transfer.');
+        setSubmitting(false);
+        return;
+      }
+
+      const transferAmount = parseFloat(amount);
+      const sourceAcc = accounts.find(a => a.id === selectedAccountId);
+      const destAcc = accounts.find(a => a.id === destinationAccountId);
+      const transferDesc = description || `Transfer from ${sourceAcc?.account_name || sourceAcc?.name} to ${destAcc?.account_name || destAcc?.name}`;
+
+      // 1. Create Expense on Source Account
+      const { error: err1 } = await supabase.from('transactions').insert([
+        {
+          account_id: selectedAccountId,
+          type: 'expense',
+          amount: transferAmount,
+          category: 'Savings & Transfer',
+          description: transferDesc,
+        },
+      ]);
+
+      // 2. Create Income on Destination Account
+      const { error: err2 } = await supabase.from('transactions').insert([
+        {
+          account_id: destinationAccountId,
+          type: 'income',
+          amount: transferAmount,
+          category: 'Savings & Transfer',
+          description: transferDesc,
+        },
+      ]);
+
+      if (err1 || err2) {
+        alert('Error completing transfer: ' + (err1?.message || err2?.message));
+      } else {
+        setAmount('');
+        setDescription('');
+        await Promise.all([fetchAccounts(), fetchTransactions()]);
+      }
     } else {
-      alert('Error saving transaction: ' + error.message);
+      // Standard Income / Expense
+      const { error } = await supabase.from('transactions').insert([
+        {
+          account_id: selectedAccountId,
+          type,
+          amount: parseFloat(amount),
+          category,
+          description,
+        },
+      ]);
+
+      if (!error) {
+        setAmount('');
+        setDescription('');
+        setCategory(CATEGORIES[0]);
+        await Promise.all([fetchAccounts(), fetchTransactions()]);
+      } else {
+        alert('Error saving transaction: ' + error.message);
+      }
     }
+
     setSubmitting(false);
   };
 
@@ -146,73 +195,147 @@ export default function Home() {
         )}
       </section>
 
-      {/* Transaction Entry Form */}
+      {/* Transaction & Transfer Form */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
-        <h2 className="text-xl font-semibold text-gray-800">Log Transaction</h2>
+        <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+          <h2 className="text-xl font-semibold text-gray-800">
+            {actionType === 'standard' ? 'Log Transaction' : 'Account Transfer'}
+          </h2>
+          <div className="flex bg-gray-100 p-1 rounded-lg text-sm">
+            <button
+              type="button"
+              onClick={() => setActionType('standard')}
+              className={`px-3 py-1 rounded-md font-medium transition-colors ${actionType === 'standard' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              Income / Expense
+            </button>
+            <button
+              type="button"
+              onClick={() => setActionType('transfer')}
+              className={`px-3 py-1 rounded-md font-medium transition-colors ${actionType === 'transfer' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              Transfer
+            </button>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Account</label>
-            <select
-              value={selectedAccountId}
-              onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
-              required
-            >
-              {accounts.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.account_name || acc.name} ({acc.owner})
-                </option>
-              ))}
-            </select>
-          </div>
+          {actionType === 'standard' ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Account</label>
+                <select
+                  value={selectedAccountId}
+                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
+                  required
+                >
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.account_name || acc.name} ({acc.owner})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value as 'income' | 'expense')}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
-              >
-                <option value="expense">Expense (-)</option>
-                <option value="income">Income (+)</option>
-              </select>
-            </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value as 'income' | 'expense')}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
+                  >
+                    <option value="expense">Expense (-)</option>
+                    <option value="income">Income (+)</option>
+                  </select>
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount (ZAR)</label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
-                required
-              />
-            </div>
-          </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount (ZAR)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
+                    required
+                  />
+                </div>
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
-            >
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
+                >
+                  {CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">From Account</label>
+                  <select
+                    value={selectedAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
+                    required
+                  >
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.account_name || acc.name} ({acc.owner})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">To Account</label>
+                  <select
+                    value={destinationAccountId}
+                    onChange={(e) => setDestinationAccountId(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
+                    required
+                  >
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.account_name || acc.name} ({acc.owner})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Transfer Amount (ZAR)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
+                  required
+                />
+              </div>
+            </>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
             <input
               type="text"
-              placeholder="e.g. Woolworths shopping, Engen fuel"
+              placeholder={actionType === 'standard' ? "e.g. Woolworths shopping" : "e.g. Monthly savings allocation"}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
@@ -224,7 +347,7 @@ export default function Home() {
             disabled={submitting}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
           >
-            {submitting ? 'Saving...' : 'Add Transaction'}
+            {submitting ? 'Processing...' : (actionType === 'standard' ? 'Add Transaction' : 'Complete Transfer')}
           </button>
         </form>
       </section>
