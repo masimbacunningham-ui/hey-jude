@@ -139,7 +139,7 @@ export default function Home() {
       .from('transactions')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(100);
 
     if (!error && data) {
       setTransactions(data);
@@ -312,6 +312,42 @@ export default function Home() {
     await loadData();
   };
 
+  // Export Filtered Transactions to CSV
+  const exportToCSV = () => {
+    if (filteredTransactions.length === 0) {
+      alert('No transactions available to export.');
+      return;
+    }
+
+    const headers = ['Date', 'Description', 'Category', 'Type', 'Amount', 'Currency', 'Account', 'Project', 'Phase Milestone', 'Exchange Rate', 'Remittance Fee'];
+    
+    const rows = filteredTransactions.map(tx => {
+      const date = new Date(tx.created_at).toLocaleDateString();
+      const desc = `"${(tx.description || '').replace(/"/g, '""')}"`;
+      const cat = `"${(tx.category || 'General').replace(/"/g, '""')}"`;
+      const type = tx.type || tx.transaction_type || 'expense';
+      const amount = tx.amount;
+      const curr = getAccountCurrency(tx.account_id);
+      const account = `"${getAccountName(tx.account_id).replace(/"/g, '""')}"`;
+      const proj = `"${(getProjectName(tx.project_id) || '').replace(/"/g, '""')}"`;
+      const phase = `"${(getMilestoneName(tx.milestone_id) || '').replace(/"/g, '""')}"`;
+      const fx = tx.exchange_rate || '';
+      const fee = tx.remittance_fee || '';
+
+      return [date, desc, cat, type, amount, curr, account, proj, phase, fx, fee].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Mahusekwa_Farm_Financial_Statement_${selectedCategoryFilter.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const getAccountName = (id: string) => {
     const acc = accounts.find((a) => a.id === id);
     return acc ? (acc.account_name || acc.name) : 'Account';
@@ -373,9 +409,18 @@ export default function Home() {
 
   return (
     <main className="max-w-2xl mx-auto p-6 space-y-8 font-sans">
-      <header>
-        <h1 className="text-3xl font-bold text-gray-900">Hey Jude</h1>
-        <p className="text-gray-600">Shared Household & Farm Financial Assistant</p>
+      <header className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Hey Jude</h1>
+          <p className="text-gray-600">Shared Household & Farm Financial Assistant</p>
+        </div>
+        <button
+          type="button"
+          onClick={exportToCSV}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
+        >
+          📥 Export CSV
+        </button>
       </header>
 
       {/* Multi-Currency Monthly Summary Bar */}
@@ -734,7 +779,7 @@ export default function Home() {
                     value={selectedProjectId}
                     onChange={(e) => {
                       setSelectedProjectId(e.target.value);
-                      setSelectedMilestoneId('none'); // reset phase when project changes
+                      setSelectedMilestoneId('none');
                     }}
                     className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
                   >
@@ -748,7 +793,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Conditional Phase Milestone Selector when Mahusekwa is selected */}
               {selectedProjectId === mahusekwaProject?.id && mahusekwaMilestones.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Farm Phase / Milestone</label>
