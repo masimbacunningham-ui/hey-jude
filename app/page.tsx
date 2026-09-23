@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -33,6 +32,8 @@ interface Transaction {
   amount: number;
   description: string;
   category?: string;
+  exchange_rate?: number;
+  remittance_fee?: number;
   created_at: string;
 }
 
@@ -81,10 +82,11 @@ export default function Home() {
   // Filter State
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('All');
 
-  // Cross-Currency Loan Payment State
+  // Cross-Currency Loan Payment State with Remittance
   const [payingLoanId, setPayingLoanId] = useState<string | null>(null);
-  const [loanPaymentLoanAmount, setLoanPaymentLoanAmount] = useState(''); // e.g. in EUR
-  const [loanPaymentAccountAmount, setLoanPaymentAccountAmount] = useState(''); // e.g. in ZAR
+  const [loanPaymentLoanAmount, setLoanPaymentLoanAmount] = useState(''); // e.g. EUR credited
+  const [loanPaymentAccountAmount, setLoanPaymentAccountAmount] = useState(''); // e.g. ZAR debited
+  const [loanPaymentFee, setLoanPaymentFee] = useState(''); // Remittance fee
   const [loanPaymentAccountId, setLoanPaymentAccountId] = useState<string>('');
 
   // Add New Loan Form State
@@ -241,16 +243,19 @@ export default function Home() {
     }
   };
 
-  // Handle Cross-Currency Loan Payment
+  // Handle Cross-Currency Loan Payment with Remittance & Exchange Rate
   const handleLoanPayment = async (loan: Loan) => {
-    const loanCredit = parseFloat(loanPaymentLoanAmount); // e.g. EUR amount
-    const accountDebit = parseFloat(loanPaymentAccountAmount); // e.g. ZAR amount debited from Hello Paisa
+    const loanCredit = parseFloat(loanPaymentLoanAmount); // e.g. EUR credited to loan
+    const accountDebit = parseFloat(loanPaymentAccountAmount); // e.g. ZAR debited from account
+    const fee = loanPaymentFee ? parseFloat(loanPaymentFee) : 0;
     
     if (!loanCredit || !accountDebit || loanCredit <= 0 || accountDebit <= 0) {
       alert('Please enter valid amounts for both loan credit and account debit.');
       return;
     }
 
+    // Calculate effective exchange rate (Total Account Debit / Loan Credit)
+    const exchangeRate = Number((accountDebit / loanCredit).toFixed(4));
     const newPaidAmount = Number(loan.paid_amount) + loanCredit;
 
     // 1. Update loan paid amount
@@ -264,9 +269,11 @@ export default function Home() {
       return;
     }
 
-    // 2. Log expense transaction in the account currency (e.g. ZAR via Hello Paisa)
+    // 2. Log expense transaction with remittance metrics
     const sourceAccount = accounts.find(a => a.id === loanPaymentAccountId);
     const accountCurrency = sourceAccount ? sourceAccount.currency : 'ZAR';
+
+    const txDescription = `Loan payment for ${loan.loan_name} (Credited: ${loan.currency} ${loanCredit.toFixed(2)})`;
 
     const { error: txError } = await supabase.from('transactions').insert([
       {
@@ -274,7 +281,9 @@ export default function Home() {
         type: 'expense',
         amount: accountDebit,
         category: 'Debt & Loans',
-        description: `Loan payment for ${loan.loan_name} (Credited: ${loan.currency} ${loanCredit.toFixed(2)})`,
+        description: txDescription,
+        exchange_rate: exchangeRate,
+        remittance_fee: fee,
       },
     ]);
 
@@ -285,6 +294,7 @@ export default function Home() {
     setPayingLoanId(null);
     setLoanPaymentLoanAmount('');
     setLoanPaymentAccountAmount('');
+    setLoanPaymentFee('');
     await loadData();
   };
 
@@ -431,7 +441,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* Debt & Loan Tracker Card with Cross-Currency Payment */}
+      {/* Debt & Loan Tracker Card with Remittance Tracking */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-semibold text-gray-800">Debts & Loans Tracker</h2>
@@ -525,7 +535,7 @@ export default function Home() {
 
                   {payingLoanId === loan.id ? (
                     <div className="pt-3 border-t border-gray-200 space-y-3 bg-white p-3 rounded-lg border border-gray-200">
-                      <p className="text-xs font-semibold text-gray-700">Log Cross-Border Loan Payment</p>
+                      <p className="text-xs font-semibold text-gray-700">Log Remittance & Cross-Border Payment</p>
                       
                       <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -541,7 +551,7 @@ export default function Home() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Account Debited</label>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Pay From Account</label>
                           <select
                             value={loanPaymentAccountId}
                             onChange={(e) => setLoanPaymentAccountId(e.target.value)}
@@ -556,18 +566,31 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Amount Paid from Account ({getAccountCurrency(loanPaymentAccountId || accounts[0]?.id)})</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="e.g. 3000.00"
-                          value={loanPaymentAccountAmount}
-                          onChange={(e) => setLoanPaymentAccountAmount(e.target.value)}
-                          className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
-                        />
-                        <p className="text-[10px] text-gray-500 mt-1">Enter the local currency amount debited from Hello Paisa.</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Total Debited ({getAccountCurrency(loanPaymentAccountId || accounts[0]?.id)})</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="e.g. 3150.00"
+                            value={loanPaymentAccountAmount}
+                            onChange={(e) => setLoanPaymentAccountAmount(e.target.value)}
+                            className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Transfer Fee (Optional)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="e.g. 50.00"
+                            value={loanPaymentFee}
+                            onChange={(e) => setLoanPaymentFee(e.target.value)}
+                            className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                          />
+                        </div>
                       </div>
+                      <p className="text-[10px] text-gray-500">The app will automatically calculate the effective exchange rate.</p>
 
                       <div className="flex space-x-2 pt-2">
                         <button
@@ -575,7 +598,7 @@ export default function Home() {
                           onClick={() => handleLoanPayment(loan)}
                           className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium py-2 rounded-lg transition-colors"
                         >
-                          Confirm Payment
+                          Confirm Remittance Payment
                         </button>
                         <button
                           type="button"
@@ -594,6 +617,7 @@ export default function Home() {
                           setPayingLoanId(loan.id);
                           setLoanPaymentLoanAmount('');
                           setLoanPaymentAccountAmount('');
+                          setLoanPaymentFee('');
                         }}
                         className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-1.5 rounded-lg transition-colors"
                       >
@@ -783,7 +807,7 @@ export default function Home() {
         </form>
       </section>
 
-      {/* Recent Transactions Feed */}
+      {/* Recent Transactions Feed with Remittance Metadata */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h2 className="text-xl font-semibold text-gray-800">Recent Activity</h2>
@@ -833,7 +857,7 @@ export default function Home() {
                     <p className="font-medium text-gray-900">
                       {tx.description ? tx.description : (tx.category || 'General')}
                     </p>
-                    <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
+                    <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-medium">
                         {tx.category || 'General'}
                       </span> 
@@ -843,6 +867,16 @@ export default function Home() {
                         </span>
                       )}
                       <span>• {getAccountName(tx.account_id)} • {new Date(tx.created_at).toLocaleDateString()}</span>
+                      {tx.exchange_rate && (
+                        <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-medium border border-indigo-200">
+                          💱 FX: {tx.exchange_rate}
+                        </span>
+                      )}
+                      {tx.remittance_fee && Number(tx.remittance_fee) > 0 && (
+                        <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-medium border border-amber-200">
+                          fee: {curr} {Number(tx.remittance_fee).toFixed(2)}
+                        </span>
+                      )}
                     </p>
                   </div>
                   <span className={`font-semibold ${isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
