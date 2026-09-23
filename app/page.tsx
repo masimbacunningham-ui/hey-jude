@@ -53,6 +53,9 @@ export default function Home() {
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Filter State
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('All');
+
   // Fetch Accounts
   const fetchAccounts = async () => {
     const { data, error } = await supabase.from('accounts').select('*');
@@ -65,7 +68,7 @@ export default function Home() {
     }
   };
 
-  // Fetch Transactions (increased limit for summary accuracy)
+  // Fetch Transactions
   const fetchTransactions = async () => {
     const { data, error } = await supabase
       .from('transactions')
@@ -181,6 +184,11 @@ export default function Home() {
     .reduce((sum, tx) => sum + Number(tx.amount), 0);
 
   const netMonthlyCashflow = totalMonthlyIncome - totalMonthlyExpenses;
+
+  // Filtered transactions for Recent Activity feed
+  const filteredTransactions = selectedCategoryFilter === 'All'
+    ? transactions
+    : transactions.filter(tx => (tx.category || 'General') === selectedCategoryFilter);
 
   return (
     <main className="max-w-2xl mx-auto p-6 space-y-8 font-sans">
@@ -391,14 +399,46 @@ export default function Home() {
         </form>
       </section>
 
-      {/* Recent Transactions Feed */}
+      {/* Recent Transactions Feed with Category Filter */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
-        <h2 className="text-xl font-semibold text-gray-800">Recent Activity</h2>
-        {transactions.length === 0 ? (
-          <p className="text-gray-500 text-sm">No transactions logged yet.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <h2 className="text-xl font-semibold text-gray-800">Recent Activity</h2>
+        </div>
+
+        {/* Category Filter Pills */}
+        <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setSelectedCategoryFilter('All')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+              selectedCategoryFilter === 'All'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            All Categories
+          </button>
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setSelectedCategoryFilter(cat)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                selectedCategoryFilter === cat
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {filteredTransactions.length === 0 ? (
+          <p className="text-gray-500 text-sm py-4 text-center">No transactions found for this category.</p>
         ) : (
           <div className="divide-y divide-gray-100">
-            {transactions.map((tx) => {
+            {filteredTransactions.map((tx) => {
               const txType = tx.type || tx.transaction_type;
               const isIncome = txType === 'income';
               return (
