@@ -1,0 +1,10 @@
+{
+  "name": "Hey Jude — Household Financial Assistant",
+  "short_name": "Hey Jude",
+  "description": "Shared household money management for Cunningham & Lynne.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#0b1220",
+  "icons": []
+}
