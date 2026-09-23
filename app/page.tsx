@@ -54,6 +54,20 @@ interface Loan {
   currency: string;
 }
 
+interface RecurringTransaction {
+  id: string;
+  account_id: string;
+  project_id?: string | null;
+  milestone_id?: string | null;
+  type: string;
+  amount: number;
+  category: string;
+  description: string;
+  frequency: string;
+  next_due_date: string;
+  active: boolean;
+}
+
 const CATEGORIES = [
   'Groceries',
   'Transport & Fuel',
@@ -76,6 +90,7 @@ export default function Home() {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [recurringList, setRecurringList] = useState<RecurringTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Form State
@@ -107,6 +122,15 @@ export default function Home() {
   const [newLoanPaid, setNewLoanPaid] = useState('');
   const [newLoanCurrency, setNewLoanCurrency] = useState('EUR');
 
+  // Add Recurring Standing Order Form State
+  const [showAddRecurringForm, setShowAddRecurringForm] = useState(false);
+  const [recDescription, setRecDescription] = useState('');
+  const [recAmount, setRecAmount] = useState('');
+  const [recType, setRecType] = useState<'income' | 'expense'>('expense');
+  const [recCategory, setRecCategory] = useState(CATEGORIES[0]);
+  const [recAccountId, setRecAccountId] = useState('');
+  const [recNextDate, setRecNextDate] = useState(new Date().toISOString().split('T')[0]);
+
   // Fetch Data
   const fetchAccounts = async () => {
     const { data, error } = await supabase.from('accounts').select('*');
@@ -116,6 +140,7 @@ export default function Home() {
         if (!selectedAccountId) setSelectedAccountId(data[0].id);
         if (!destinationAccountId && data.length > 1) setDestinationAccountId(data[1].id);
         if (!loanPaymentAccountId) setLoanPaymentAccountId(data[0].id);
+        if (!recAccountId) setRecAccountId(data[0].id);
       }
     }
   };
@@ -153,9 +178,65 @@ export default function Home() {
     }
   };
 
+  const fetchRecurring = async () => {
+    const { data, error } = await supabase.from('recurring_transactions').select('*');
+    if (!error && data) {
+      setRecurringList(data);
+      checkAndProcessRecurring(data);
+    }
+  };
+
+  // Automatic Standing Order Processing Engine
+  const checkAndProcessRecurring = async (recurringItems: RecurringTransaction[]) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    let processedAny = false;
+
+    for (const item of recurringItems) {
+      if (item.active && item.next_due_date <= todayStr) {
+        // 1. Insert the due transaction
+        const { error: txErr } = await supabase.from('transactions').insert([
+          {
+            account_id: item.account_id,
+            project_id: item.project_id || null,
+            milestone_id: item.milestone_id || null,
+            type: item.type,
+            amount: item.amount,
+            category: item.category,
+            description: `[Standing Order] ${item.description}`,
+          },
+        ]);
+
+        if (!txErr) {
+          // 2. Advance next due date by 1 month
+          const currentDueDate = new Date(item.next_due_date);
+          currentDueDate.setMonth(currentDueDate.getMonth() + 1);
+          const nextDateStr = currentDueDate.toISOString().split('T')[0];
+
+          await supabase
+            .from('recurring_transactions')
+            .update({ next_due_date: nextDateStr })
+            .eq('id', item.id);
+
+          processedAny = true;
+        }
+      }
+    }
+
+    if (processedAny) {
+      fetchTransactions();
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([fetchAccounts(), fetchProjects(), fetchMilestones(), fetchTransactions(), fetchLoans()]);
+    await Promise.all([
+      fetchAccounts(), 
+      fetchProjects(), 
+      fetchMilestones(), 
+      fetchTransactions(), 
+      fetchLoans(),
+      fetchRecurring()
+    ]);
     setLoading(false);
   };
 
@@ -235,6 +316,58 @@ export default function Home() {
     }
 
     setSubmitting(false);
+  };
+
+  // Handle Creating a New Recurring Standing Order
+  const handleCreateRecurring = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recDescription || !recAmount || !recAccountId) return;
+
+    const { error } = await supabase.from('recurring_transactions').insert([
+      {
+        account_id: recAccountId,
+        type: recType,
+        amount: parseFloat(recAmount),
+        category: recCategory,
+        description: recDescription,
+        frequency: 'monthly',
+        next_due_date: recNextDate,
+        active: true,
+      },
+    ]);
+
+    if (error) {
+      alert('Error creating standing order: ' + error.message);
+    } else {
+      setRecDescription('');
+      setRecAmount('');
+      setShowAddRecurringForm(false);
+      await fetchRecurring();
+    }
+  };
+
+  // Toggle Standing Order Active Status
+  const toggleRecurringActive = async (id: string, currentStatus: boolean) => {
+    const { error } = await supabase
+      .from('recurring_transactions')
+      .update({ active: !currentStatus })
+      .eq('id', id);
+
+    if (!error) {
+      await fetchRecurring();
+    }
+  };
+
+  // Delete Standing Order
+  const deleteRecurring = async (id: string) => {
+    const { error } = await supabase
+      .from('recurring_transactions')
+      .delete()
+      .eq('id', id);
+
+    if (!error) {
+      await fetchRecurring();
+    }
   };
 
   // Handle Creating a New Loan
@@ -342,7 +475,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `Mahusekwa_Farm_Financial_Statement_${selectedCategoryFilter.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `Hey_Jude_Financial_Statement_${selectedCategoryFilter.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -459,6 +592,159 @@ export default function Home() {
         )}
       </section>
 
+      {/* Recurring Standing Orders Card */}
+      <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-800">Recurring Standing Orders</h2>
+            <p className="text-xs text-gray-500">Automated monthly rent, subscriptions & stipends</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddRecurringForm(!showAddRecurringForm)}
+            className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-3 py-1.5 rounded-lg transition-colors"
+          >
+            {showAddRecurringForm ? 'Cancel' : '+ Add Standing Order'}
+          </button>
+        </div>
+
+        {showAddRecurringForm && (
+          <form onSubmit={handleCreateRecurring} className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 space-y-3">
+            <h3 className="text-sm font-semibold text-indigo-900">New Recurring Standing Order</h3>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Hout Bay Rent"
+                  value={recDescription}
+                  onChange={(e) => setRecDescription(e.target.value)}
+                  className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Account</label>
+                <select
+                  value={recAccountId}
+                  onChange={(e) => setRecAccountId(e.target.value)}
+                  className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                >
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.account_name || acc.name} ({acc.currency})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                <select
+                  value={recType}
+                  onChange={(e) => setRecType(e.target.value as 'income' | 'expense')}
+                  className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                >
+                  <option value="expense">Expense (-)</option>
+                  <option value="income">Income (+)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Amount</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={recAmount}
+                  onChange={(e) => setRecAmount(e.target.value)}
+                  className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">First Due Date</label>
+                <input
+                  type="date"
+                  value={recNextDate}
+                  onChange={(e) => setRecNextDate(e.target.value)}
+                  className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={recCategory}
+                onChange={(e) => setRecCategory(e.target.value)}
+                className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+              >
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium py-2 rounded-lg transition-colors"
+            >
+              Save Standing Order
+            </button>
+          </form>
+        )}
+
+        {recurringList.length === 0 ? (
+          <p className="text-gray-500 text-sm py-2">No active standing orders configured.</p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {recurringList.map((item) => {
+              const curr = getAccountCurrency(item.account_id);
+              return (
+                <div key={item.id} className="py-3 flex justify-between items-center text-sm">
+                  <div>
+                    <p className="font-semibold text-gray-900 flex items-center gap-2">
+                      {item.description}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${item.active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {item.active ? 'Active' : 'Paused'}
+                      </span>
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Next Due: <strong className="text-gray-700">{item.next_due_date}</strong> • {getAccountName(item.account_id)} • Monthly
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <span className={`font-bold ${item.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {item.type === 'income' ? '+' : '-'} {curr} {Number(item.amount).toFixed(2)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleRecurringActive(item.id, item.active)}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      {item.active ? 'Pause' : 'Resume'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteRecurring(item.id)}
+                      className="text-xs text-rose-500 hover:text-rose-700 font-medium"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       {/* Mahusekwa Farm Project Tracker with Phase Milestones */}
       {mahusekwaProject && (
         <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-5">
@@ -473,7 +759,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Overall Progress Bar */}
           <div className="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
             <div 
               className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500" 
@@ -481,7 +766,6 @@ export default function Home() {
             ></div>
           </div>
 
-          {/* Phase Milestones Sub-Budgets */}
           {mahusekwaMilestones.length > 0 && (
             <div className="space-y-3 pt-2 border-t border-gray-100">
               <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Development Phases & Sub-Budgets</h3>
