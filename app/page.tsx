@@ -65,10 +65,16 @@ export default function Home() {
   // Filter State
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('All');
 
-  // Loan Payment Modal/Input State
+  // Loan Payment State
   const [payingLoanId, setPayingLoanId] = useState<string | null>(null);
   const [loanPaymentAmount, setLoanPaymentAmount] = useState('');
   const [loanPaymentAccountId, setLoanPaymentAccountId] = useState<string>('');
+
+  // Add New Loan Form State
+  const [showAddLoanForm, setShowAddLoanForm] = useState(false);
+  const [newLoanName, setNewLoanName] = useState('');
+  const [newLoanTotal, setNewLoanTotal] = useState('');
+  const [newLoanPaid, setNewLoanPaid] = useState('');
 
   // Fetch Data
   const fetchAccounts = async () => {
@@ -182,6 +188,31 @@ export default function Home() {
     setSubmitting(false);
   };
 
+  // Handle Creating a New Loan
+  const handleCreateLoan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLoanName || !newLoanTotal) return;
+
+    const { error } = await supabase.from('loans').insert([
+      {
+        loan_name: newLoanName,
+        total_amount: parseFloat(newLoanTotal),
+        paid_amount: newLoanPaid ? parseFloat(newLoanPaid) : 0,
+        currency: 'ZAR',
+      },
+    ]);
+
+    if (error) {
+      alert('Error creating loan: ' + error.message);
+    } else {
+      setNewLoanName('');
+      setNewLoanTotal('');
+      setNewLoanPaid('');
+      setShowAddLoanForm(false);
+      await fetchLoans();
+    }
+  };
+
   // Handle Loan Payment
   const handleLoanPayment = async (loan: Loan) => {
     const payment = parseFloat(loanPaymentAmount);
@@ -189,7 +220,6 @@ export default function Home() {
 
     const newPaidAmount = Number(loan.paid_amount) + payment;
 
-    // 1. Update Loan paid_amount in Supabase
     const { error: loanError } = await supabase
       .from('loans')
       .update({ paid_amount: newPaidAmount })
@@ -200,7 +230,6 @@ export default function Home() {
       return;
     }
 
-    // 2. Log expense transaction for the payment
     const { error: txError } = await supabase.from('transactions').insert([
       {
         account_id: loanPaymentAccountId || accounts[0]?.id,
@@ -244,7 +273,6 @@ export default function Home() {
 
   const netMonthlyCashflow = totalMonthlyIncome - totalMonthlyExpenses;
 
-  // Filtered transactions for Recent Activity feed
   const filteredTransactions = selectedCategoryFilter === 'All'
     ? transactions
     : transactions.filter(tx => (tx.category || 'General') === selectedCategoryFilter);
@@ -303,9 +331,68 @@ export default function Home() {
 
       {/* Debt & Loan Tracker Card */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
-        <h2 className="text-xl font-semibold text-gray-800">Debts & Loans Tracker</h2>
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-gray-800">Debts & Loans Tracker</h2>
+          <button
+            type="button"
+            onClick={() => setShowAddLoanForm(!showAddLoanForm)}
+            className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-3 py-1.5 rounded-lg transition-colors"
+          >
+            {showAddLoanForm ? 'Cancel' : '+ Add Loan'}
+          </button>
+        </div>
+
+        {/* Add Loan Inline Form */}
+        {showAddLoanForm && (
+          <form onSubmit={handleCreateLoan} className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 space-y-3">
+            <h3 className="text-sm font-semibold text-indigo-900">Add New Loan / Debt</h3>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Loan Name (e.g. Car Finance)</label>
+              <input
+                type="text"
+                placeholder="Car Finance"
+                value={newLoanName}
+                onChange={(e) => setNewLoanName(e.target.value)}
+                className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Total Loan Amount (ZAR)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="150000"
+                  value={newLoanTotal}
+                  onChange={(e) => setNewLoanTotal(e.target.value)}
+                  className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Already Paid So Far (ZAR)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={newLoanPaid}
+                  onChange={(e) => setNewLoanPaid(e.target.value)}
+                  className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium py-2 rounded-lg transition-colors"
+            >
+              Save Loan
+            </button>
+          </form>
+        )}
+
         {loans.length === 0 ? (
-          <p className="text-gray-500 text-sm">No active loans tracked.</p>
+          <p className="text-gray-500 text-sm py-2">No active loans tracked. Click &quot;+ Add Loan&quot; above to add your car loan or other debts!</p>
         ) : (
           <div className="space-y-6">
             {loans.map((loan) => {
