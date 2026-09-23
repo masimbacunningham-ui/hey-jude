@@ -52,7 +52,6 @@ const CATEGORIES = [
   'Dining & Leisure',
   'Savings & Transfer',
   'Debt & Loans',
-  // Mahusekwa Farm Project Categories
   'Infrastructure & Construction',
   'Protected Agriculture (Greenhouses)',
   'Livestock & Piggery/Poultry',
@@ -82,9 +81,10 @@ export default function Home() {
   // Filter State
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('All');
 
-  // Loan Payment State
+  // Cross-Currency Loan Payment State
   const [payingLoanId, setPayingLoanId] = useState<string | null>(null);
-  const [loanPaymentAmount, setLoanPaymentAmount] = useState('');
+  const [loanPaymentLoanAmount, setLoanPaymentLoanAmount] = useState(''); // e.g. in EUR
+  const [loanPaymentAccountAmount, setLoanPaymentAccountAmount] = useState(''); // e.g. in ZAR
   const [loanPaymentAccountId, setLoanPaymentAccountId] = useState<string>('');
 
   // Add New Loan Form State
@@ -92,6 +92,7 @@ export default function Home() {
   const [newLoanName, setNewLoanName] = useState('');
   const [newLoanTotal, setNewLoanTotal] = useState('');
   const [newLoanPaid, setNewLoanPaid] = useState('');
+  const [newLoanCurrency, setNewLoanCurrency] = useState('EUR');
 
   // Fetch Data
   const fetchAccounts = async () => {
@@ -224,7 +225,7 @@ export default function Home() {
         loan_name: newLoanName,
         total_amount: parseFloat(newLoanTotal),
         paid_amount: newLoanPaid ? parseFloat(newLoanPaid) : 0,
-        currency: 'ZAR',
+        currency: newLoanCurrency,
       },
     ]);
 
@@ -234,18 +235,25 @@ export default function Home() {
       setNewLoanName('');
       setNewLoanTotal('');
       setNewLoanPaid('');
+      setNewLoanCurrency('EUR');
       setShowAddLoanForm(false);
       await fetchLoans();
     }
   };
 
-  // Handle Loan Payment
+  // Handle Cross-Currency Loan Payment
   const handleLoanPayment = async (loan: Loan) => {
-    const payment = parseFloat(loanPaymentAmount);
-    if (!payment || payment <= 0) return;
+    const loanCredit = parseFloat(loanPaymentLoanAmount); // e.g. EUR amount
+    const accountDebit = parseFloat(loanPaymentAccountAmount); // e.g. ZAR amount debited from Hello Paisa
+    
+    if (!loanCredit || !accountDebit || loanCredit <= 0 || accountDebit <= 0) {
+      alert('Please enter valid amounts for both loan credit and account debit.');
+      return;
+    }
 
-    const newPaidAmount = Number(loan.paid_amount) + payment;
+    const newPaidAmount = Number(loan.paid_amount) + loanCredit;
 
+    // 1. Update loan paid amount
     const { error: loanError } = await supabase
       .from('loans')
       .update({ paid_amount: newPaidAmount })
@@ -256,13 +264,17 @@ export default function Home() {
       return;
     }
 
+    // 2. Log expense transaction in the account currency (e.g. ZAR via Hello Paisa)
+    const sourceAccount = accounts.find(a => a.id === loanPaymentAccountId);
+    const accountCurrency = sourceAccount ? sourceAccount.currency : 'ZAR';
+
     const { error: txError } = await supabase.from('transactions').insert([
       {
         account_id: loanPaymentAccountId || accounts[0]?.id,
         type: 'expense',
-        amount: payment,
+        amount: accountDebit,
         category: 'Debt & Loans',
-        description: `Loan payment for ${loan.loan_name}`,
+        description: `Loan payment for ${loan.loan_name} (Credited: ${loan.currency} ${loanCredit.toFixed(2)})`,
       },
     ]);
 
@@ -271,7 +283,8 @@ export default function Home() {
     }
 
     setPayingLoanId(null);
-    setLoanPaymentAmount('');
+    setLoanPaymentLoanAmount('');
+    setLoanPaymentAccountAmount('');
     await loadData();
   };
 
@@ -280,13 +293,18 @@ export default function Home() {
     return acc ? (acc.account_name || acc.name) : 'Account';
   };
 
+  const getAccountCurrency = (id: string) => {
+    const acc = accounts.find((a) => a.id === id);
+    return acc ? acc.currency : 'ZAR';
+  };
+
   const getProjectName = (id: string | null | undefined) => {
     if (!id) return null;
     const proj = projects.find((p) => p.id === id);
     return proj ? proj.project_name : null;
   };
 
-  // Monthly Summary Calculations
+  // Monthly Summary Calculations Grouped by Currency
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
 
@@ -295,15 +313,19 @@ export default function Home() {
     return txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear;
   });
 
-  const totalMonthlyIncome = monthlyTransactions
-    .filter(tx => (tx.type || tx.transaction_type) === 'income')
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
-
-  const totalMonthlyExpenses = monthlyTransactions
-    .filter(tx => (tx.type || tx.transaction_type) === 'expense')
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
-
-  const netMonthlyCashflow = totalMonthlyIncome - totalMonthlyExpenses;
+  const monthlyTotalsByCurrency: { [currency: string]: { income: number; expense: number } } = {};
+  monthlyTransactions.forEach(tx => {
+    const curr = getAccountCurrency(tx.account_id);
+    if (!monthlyTotalsByCurrency[curr]) {
+      monthlyTotalsByCurrency[curr] = { income: 0, expense: 0 };
+    }
+    const txType = tx.type || tx.transaction_type;
+    if (txType === 'income') {
+      monthlyTotalsByCurrency[curr].income += Number(tx.amount);
+    } else if (txType === 'expense') {
+      monthlyTotalsByCurrency[curr].expense += Number(tx.amount);
+    }
+  });
 
   // Project Totals Calculation
   const mahusekwaProject = projects.find(p => p.project_name.toLowerCase().includes('mahusekwa'));
@@ -324,27 +346,40 @@ export default function Home() {
         <p className="text-gray-600">Shared Household & Farm Financial Assistant</p>
       </header>
 
-      {/* Monthly Summary Bar */}
-      <section className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-6 rounded-xl shadow-md space-y-3">
-        <div className="flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-blue-100">Monthly Summary ({new Date().toLocaleString('default', { month: 'long', year: 'numeric' })})</h2>
-        </div>
-        <div className="grid grid-cols-3 gap-4 pt-2 border-t border-blue-800">
-          <div>
-            <p className="text-xs text-blue-300 font-medium uppercase tracking-wider">Income</p>
-            <p className="text-lg font-bold text-emerald-400">+ ZAR {totalMonthlyIncome.toFixed(2)}</p>
+      {/* Multi-Currency Monthly Summary Bar */}
+      <section className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-6 rounded-xl shadow-md space-y-4">
+        <h2 className="text-lg font-semibold text-blue-100">Monthly Summary ({new Date().toLocaleString('default', { month: 'long', year: 'numeric' })})</h2>
+        
+        {Object.keys(monthlyTotalsByCurrency).length === 0 ? (
+          <p className="text-blue-200 text-sm">No transactions logged for this month yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {Object.entries(monthlyTotalsByCurrency).map(([curr, totals]) => {
+              const net = totals.income - totals.expense;
+              return (
+                <div key={curr} className="pt-3 border-t border-blue-800 first:border-0 first:pt-0">
+                  <p className="text-xs text-blue-300 font-semibold tracking-wider mb-1">{curr} Totals</p>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-xs text-blue-300">Income</p>
+                      <p className="text-sm font-bold text-emerald-400">+{curr} {totals.income.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-blue-300">Expenses</p>
+                      <p className="text-sm font-bold text-rose-400">-{curr} {totals.expense.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-blue-300">Net</p>
+                      <p className={`text-sm font-bold ${net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {net >= 0 ? '+' : ''}{curr} {net.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div>
-            <p className="text-xs text-blue-300 font-medium uppercase tracking-wider">Expenses</p>
-            <p className="text-lg font-bold text-rose-400">- ZAR {totalMonthlyExpenses.toFixed(2)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-blue-300 font-medium uppercase tracking-wider">Net Cashflow</p>
-            <p className={`text-lg font-bold ${netMonthlyCashflow >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {netMonthlyCashflow >= 0 ? '+' : ''} ZAR {netMonthlyCashflow.toFixed(2)}
-            </p>
-          </div>
-        </div>
+        )}
       </section>
 
       {/* Mahusekwa Farm Project Tracker */}
@@ -361,7 +396,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Progress Bar */}
           <div className="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
             <div 
               className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500" 
@@ -397,7 +431,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* Debt & Loan Tracker Card */}
+      {/* Debt & Loan Tracker Card with Cross-Currency Payment */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-semibold text-gray-800">Debts & Loans Tracker</h2>
@@ -414,7 +448,7 @@ export default function Home() {
           <form onSubmit={handleCreateLoan} className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 space-y-3">
             <h3 className="text-sm font-semibold text-indigo-900">Add New Loan / Debt</h3>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Loan Name (e.g. Car Finance)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Loan Name</label>
               <input
                 type="text"
                 placeholder="Car Finance"
@@ -424,28 +458,29 @@ export default function Home() {
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Total Loan Amount (ZAR)</label>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Currency</label>
+                <select
+                  value={newLoanCurrency}
+                  onChange={(e) => setNewLoanCurrency(e.target.value)}
+                  className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                >
+                  <option value="EUR">EUR</option>
+                  <option value="USD">USD</option>
+                  <option value="ZAR">ZAR</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Total Loan Amount</label>
                 <input
                   type="number"
                   step="0.01"
-                  placeholder="150000"
+                  placeholder="4800"
                   value={newLoanTotal}
                   onChange={(e) => setNewLoanTotal(e.target.value)}
                   className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
                   required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Already Paid So Far (ZAR)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={newLoanPaid}
-                  onChange={(e) => setNewLoanPaid(e.target.value)}
-                  className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
                 />
               </div>
             </div>
@@ -489,22 +524,24 @@ export default function Home() {
                   </div>
 
                   {payingLoanId === loan.id ? (
-                    <div className="pt-3 border-t border-gray-200 space-y-3">
+                    <div className="pt-3 border-t border-gray-200 space-y-3 bg-white p-3 rounded-lg border border-gray-200">
+                      <p className="text-xs font-semibold text-gray-700">Log Cross-Border Loan Payment</p>
+                      
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Payment Amount</label>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Loan Credit ({loan.currency})</label>
                           <input
                             type="number"
                             step="0.01"
-                            placeholder="0.00"
-                            value={loanPaymentAmount}
-                            onChange={(e) => setLoanPaymentAmount(e.target.value)}
+                            placeholder="e.g. 150.00"
+                            value={loanPaymentLoanAmount}
+                            onChange={(e) => setLoanPaymentLoanAmount(e.target.value)}
                             className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
                             autoFocus
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Pay From Account</label>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Account Debited</label>
                           <select
                             value={loanPaymentAccountId}
                             onChange={(e) => setLoanPaymentAccountId(e.target.value)}
@@ -512,19 +549,33 @@ export default function Home() {
                           >
                             {accounts.map((acc) => (
                               <option key={acc.id} value={acc.id}>
-                                {acc.account_name || acc.name}
+                                {acc.account_name || acc.name} ({acc.currency})
                               </option>
                             ))}
                           </select>
                         </div>
                       </div>
-                      <div className="flex space-x-2">
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Amount Paid from Account ({getAccountCurrency(loanPaymentAccountId || accounts[0]?.id)})</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g. 3000.00"
+                          value={loanPaymentAccountAmount}
+                          onChange={(e) => setLoanPaymentAccountAmount(e.target.value)}
+                          className="w-full p-2 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 outline-none"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">Enter the local currency amount debited from Hello Paisa.</p>
+                      </div>
+
+                      <div className="flex space-x-2 pt-2">
                         <button
                           type="button"
                           onClick={() => handleLoanPayment(loan)}
                           className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium py-2 rounded-lg transition-colors"
                         >
-                          Confirm & Pay
+                          Confirm Payment
                         </button>
                         <button
                           type="button"
@@ -541,7 +592,8 @@ export default function Home() {
                         type="button"
                         onClick={() => {
                           setPayingLoanId(loan.id);
-                          setLoanPaymentAmount('');
+                          setLoanPaymentLoanAmount('');
+                          setLoanPaymentAccountAmount('');
                         }}
                         className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium px-3 py-1.5 rounded-lg transition-colors"
                       >
@@ -594,7 +646,7 @@ export default function Home() {
                   >
                     {accounts.map((acc) => (
                       <option key={acc.id} value={acc.id}>
-                        {acc.account_name || acc.name} ({acc.owner})
+                        {acc.account_name || acc.name} ({acc.currency})
                       </option>
                     ))}
                   </select>
@@ -631,7 +683,7 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount (ZAR)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
                   <input
                     type="number"
                     step="0.01"
@@ -672,7 +724,7 @@ export default function Home() {
                   >
                     {accounts.map((acc) => (
                       <option key={acc.id} value={acc.id}>
-                        {acc.account_name || acc.name} ({acc.owner})
+                        {acc.account_name || acc.name} ({acc.currency})
                       </option>
                     ))}
                   </select>
@@ -688,7 +740,7 @@ export default function Home() {
                   >
                     {accounts.map((acc) => (
                       <option key={acc.id} value={acc.id}>
-                        {acc.account_name || acc.name} ({acc.owner})
+                        {acc.account_name || acc.name} ({acc.currency})
                       </option>
                     ))}
                   </select>
@@ -696,7 +748,7 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Transfer Amount (ZAR)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Transfer Amount</label>
                 <input
                   type="number"
                   step="0.01"
@@ -714,7 +766,7 @@ export default function Home() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
             <input
               type="text"
-              placeholder={actionType === 'standard' ? "e.g. Greenhouse shade netting & poles" : "e.g. Monthly savings allocation"}
+              placeholder={actionType === 'standard' ? "e.g. Car loan installment" : "e.g. Monthly savings allocation"}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
@@ -731,7 +783,7 @@ export default function Home() {
         </form>
       </section>
 
-      {/* Recent Transactions Feed with Category Filter */}
+      {/* Recent Transactions Feed */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h2 className="text-xl font-semibold text-gray-800">Recent Activity</h2>
@@ -774,6 +826,7 @@ export default function Home() {
               const txType = tx.type || tx.transaction_type;
               const isIncome = txType === 'income';
               const projName = getProjectName(tx.project_id);
+              const curr = getAccountCurrency(tx.account_id);
               return (
                 <div key={tx.id} className="py-3 flex justify-between items-center text-sm">
                   <div>
@@ -793,7 +846,7 @@ export default function Home() {
                     </p>
                   </div>
                   <span className={`font-semibold ${isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {isIncome ? '+' : '-'} ZAR {Number(tx.amount).toFixed(2)}
+                    {isIncome ? '+' : '-'} {curr} {Number(tx.amount).toFixed(2)}
                   </span>
                 </div>
               );
