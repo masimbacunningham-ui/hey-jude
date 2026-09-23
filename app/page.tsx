@@ -65,13 +65,13 @@ export default function Home() {
     }
   };
 
-  // Fetch Recent Transactions
+  // Fetch Transactions (increased limit for summary accuracy)
   const fetchTransactions = async () => {
     const { data, error } = await supabase
       .from('transactions')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(50);
 
     if (!error && data) {
       setTransactions(data);
@@ -107,7 +107,6 @@ export default function Home() {
       const destAcc = accounts.find(a => a.id === destinationAccountId);
       const transferDesc = description || `Transfer from ${sourceAcc?.account_name || sourceAcc?.name} to ${destAcc?.account_name || destAcc?.name}`;
 
-      // 1. Create Expense on Source Account
       const { error: err1 } = await supabase.from('transactions').insert([
         {
           account_id: selectedAccountId,
@@ -118,7 +117,6 @@ export default function Home() {
         },
       ]);
 
-      // 2. Create Income on Destination Account
       const { error: err2 } = await supabase.from('transactions').insert([
         {
           account_id: destinationAccountId,
@@ -137,7 +135,6 @@ export default function Home() {
         await Promise.all([fetchAccounts(), fetchTransactions()]);
       }
     } else {
-      // Standard Income / Expense
       const { error } = await supabase.from('transactions').insert([
         {
           account_id: selectedAccountId,
@@ -166,12 +163,54 @@ export default function Home() {
     return acc ? (acc.account_name || acc.name) : 'Account';
   };
 
+  // Monthly Summary Calculations
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+
+  const monthlyTransactions = transactions.filter(tx => {
+    const txDate = new Date(tx.created_at);
+    return txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear;
+  });
+
+  const totalMonthlyIncome = monthlyTransactions
+    .filter(tx => (tx.type || tx.transaction_type) === 'income')
+    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+  const totalMonthlyExpenses = monthlyTransactions
+    .filter(tx => (tx.type || tx.transaction_type) === 'expense')
+    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+  const netMonthlyCashflow = totalMonthlyIncome - totalMonthlyExpenses;
+
   return (
     <main className="max-w-2xl mx-auto p-6 space-y-8 font-sans">
       <header>
         <h1 className="text-3xl font-bold text-gray-900">Hey Jude</h1>
         <p className="text-gray-600">Shared Household Financial Assistant</p>
       </header>
+
+      {/* Monthly Summary Bar */}
+      <section className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-6 rounded-xl shadow-md space-y-3">
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-blue-100">Monthly Summary ({new Date().toLocaleString('default', { month: 'long', year: 'numeric' })})</h2>
+        </div>
+        <div className="grid grid-cols-3 gap-4 pt-2 border-t border-blue-800">
+          <div>
+            <p className="text-xs text-blue-300 font-medium uppercase tracking-wider">Income</p>
+            <p className="text-lg font-bold text-emerald-400">+ ZAR {totalMonthlyIncome.toFixed(2)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-blue-300 font-medium uppercase tracking-wider">Expenses</p>
+            <p className="text-lg font-bold text-rose-400">- ZAR {totalMonthlyExpenses.toFixed(2)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-blue-300 font-medium uppercase tracking-wider">Net Cashflow</p>
+            <p className={`text-lg font-bold ${netMonthlyCashflow >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {netMonthlyCashflow >= 0 ? '+' : ''} ZAR {netMonthlyCashflow.toFixed(2)}
+            </p>
+          </div>
+        </div>
+      </section>
 
       {/* Account Balances Card */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
