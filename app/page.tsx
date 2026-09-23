@@ -23,10 +23,19 @@ interface Project {
   currency: string;
 }
 
+interface Milestone {
+  id: string;
+  project_id: string;
+  phase_name: string;
+  sub_budget: number;
+  currency: string;
+}
+
 interface Transaction {
   id: number;
   account_id: string;
   project_id?: string | null;
+  milestone_id?: string | null;
   type: string;
   transaction_type?: string;
   amount: number;
@@ -64,6 +73,7 @@ const CATEGORIES = [
 export default function Home() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +83,7 @@ export default function Home() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [destinationAccountId, setDestinationAccountId] = useState<string>('');
   const [selectedProjectId, setSelectedProjectId] = useState<string>('none');
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<string>('none');
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
@@ -84,9 +95,9 @@ export default function Home() {
 
   // Cross-Currency Loan Payment State with Remittance
   const [payingLoanId, setPayingLoanId] = useState<string | null>(null);
-  const [loanPaymentLoanAmount, setLoanPaymentLoanAmount] = useState(''); // e.g. EUR credited
-  const [loanPaymentAccountAmount, setLoanPaymentAccountAmount] = useState(''); // e.g. ZAR debited
-  const [loanPaymentFee, setLoanPaymentFee] = useState(''); // Remittance fee
+  const [loanPaymentLoanAmount, setLoanPaymentLoanAmount] = useState('');
+  const [loanPaymentAccountAmount, setLoanPaymentAccountAmount] = useState('');
+  const [loanPaymentFee, setLoanPaymentFee] = useState('');
   const [loanPaymentAccountId, setLoanPaymentAccountId] = useState<string>('');
 
   // Add New Loan Form State
@@ -116,6 +127,13 @@ export default function Home() {
     }
   };
 
+  const fetchMilestones = async () => {
+    const { data, error } = await supabase.from('project_milestones').select('*');
+    if (!error && data) {
+      setMilestones(data);
+    }
+  };
+
   const fetchTransactions = async () => {
     const { data, error } = await supabase
       .from('transactions')
@@ -137,7 +155,7 @@ export default function Home() {
 
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([fetchAccounts(), fetchProjects(), fetchTransactions(), fetchLoans()]);
+    await Promise.all([fetchAccounts(), fetchProjects(), fetchMilestones(), fetchTransactions(), fetchLoans()]);
     setLoading(false);
   };
 
@@ -196,6 +214,7 @@ export default function Home() {
         {
           account_id: selectedAccountId,
           project_id: selectedProjectId === 'none' ? null : selectedProjectId,
+          milestone_id: selectedMilestoneId === 'none' ? null : selectedMilestoneId,
           type,
           amount: parseFloat(amount),
           category,
@@ -208,6 +227,7 @@ export default function Home() {
         setDescription('');
         setCategory(CATEGORIES[0]);
         setSelectedProjectId('none');
+        setSelectedMilestoneId('none');
         await loadData();
       } else {
         alert('Error saving transaction: ' + error.message);
@@ -245,8 +265,8 @@ export default function Home() {
 
   // Handle Cross-Currency Loan Payment with Remittance & Exchange Rate
   const handleLoanPayment = async (loan: Loan) => {
-    const loanCredit = parseFloat(loanPaymentLoanAmount); // e.g. EUR credited to loan
-    const accountDebit = parseFloat(loanPaymentAccountAmount); // e.g. ZAR debited from account
+    const loanCredit = parseFloat(loanPaymentLoanAmount);
+    const accountDebit = parseFloat(loanPaymentAccountAmount);
     const fee = loanPaymentFee ? parseFloat(loanPaymentFee) : 0;
     
     if (!loanCredit || !accountDebit || loanCredit <= 0 || accountDebit <= 0) {
@@ -254,11 +274,9 @@ export default function Home() {
       return;
     }
 
-    // Calculate effective exchange rate (Total Account Debit / Loan Credit)
     const exchangeRate = Number((accountDebit / loanCredit).toFixed(4));
     const newPaidAmount = Number(loan.paid_amount) + loanCredit;
 
-    // 1. Update loan paid amount
     const { error: loanError } = await supabase
       .from('loans')
       .update({ paid_amount: newPaidAmount })
@@ -268,10 +286,6 @@ export default function Home() {
       alert('Error updating loan: ' + loanError.message);
       return;
     }
-
-    // 2. Log expense transaction with remittance metrics
-    const sourceAccount = accounts.find(a => a.id === loanPaymentAccountId);
-    const accountCurrency = sourceAccount ? sourceAccount.currency : 'ZAR';
 
     const txDescription = `Loan payment for ${loan.loan_name} (Credited: ${loan.currency} ${loanCredit.toFixed(2)})`;
 
@@ -314,6 +328,12 @@ export default function Home() {
     return proj ? proj.project_name : null;
   };
 
+  const getMilestoneName = (id: string | null | undefined) => {
+    if (!id) return null;
+    const m = milestones.find((item) => item.id === id);
+    return m ? m.phase_name : null;
+  };
+
   // Monthly Summary Calculations Grouped by Currency
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
@@ -337,8 +357,10 @@ export default function Home() {
     }
   });
 
-  // Project Totals Calculation
+  // Project & Phase Totals Calculation
   const mahusekwaProject = projects.find(p => p.project_name.toLowerCase().includes('mahusekwa'));
+  const mahusekwaMilestones = milestones.filter(m => m.project_id === mahusekwaProject?.id);
+
   const mahusekwaSpent = transactions
     .filter(tx => tx.project_id === mahusekwaProject?.id && (tx.type || tx.transaction_type) === 'expense')
     .reduce((sum, tx) => sum + Number(tx.amount), 0);
@@ -392,30 +414,60 @@ export default function Home() {
         )}
       </section>
 
-      {/* Mahusekwa Farm Project Tracker */}
+      {/* Mahusekwa Farm Project Tracker with Phase Milestones */}
       {mahusekwaProject && (
-        <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+        <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-5">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-xl font-semibold text-gray-800">🌱 {mahusekwaProject.project_name}</h2>
-              <p className="text-xs text-gray-500">Capital Expenditure & Development Tracking</p>
+              <p className="text-xs text-gray-500">Capital Expenditure & Phase Milestones</p>
             </div>
             <div className="text-right">
-              <p className="text-sm font-bold text-gray-900">Budget: {mahusekwaProject.currency} {mahusekwaBudget.toLocaleString()}</p>
-              <p className="text-xs text-emerald-600 font-medium">Spent: {mahusekwaProject.currency} {mahusekwaSpent.toLocaleString()} ({mahusekwaProgress}%)</p>
+              <p className="text-sm font-bold text-gray-900">Total Budget: {mahusekwaProject.currency} {mahusekwaBudget.toLocaleString()}</p>
+              <p className="text-xs text-emerald-600 font-medium">Total Spent: {mahusekwaProject.currency} {mahusekwaSpent.toLocaleString()} ({mahusekwaProgress}%)</p>
             </div>
           </div>
 
+          {/* Overall Progress Bar */}
           <div className="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
             <div 
               className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500" 
               style={{ width: `${mahusekwaProgress}%` }}
             ></div>
           </div>
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>Remaining Budget: {mahusekwaProject.currency} {Math.max(0, mahusekwaBudget - mahusekwaSpent).toLocaleString()}</span>
-            <span>{mahusekwaProgress}% Utilized</span>
-          </div>
+
+          {/* Phase Milestones Sub-Budgets */}
+          {mahusekwaMilestones.length > 0 && (
+            <div className="space-y-3 pt-2 border-t border-gray-100">
+              <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Development Phases & Sub-Budgets</h3>
+              <div className="grid grid-cols-1 gap-3">
+                {mahusekwaMilestones.map((m) => {
+                  const phaseSpent = transactions
+                    .filter(tx => tx.milestone_id === m.id && (tx.type || tx.transaction_type) === 'expense')
+                    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+                  const subBudget = Number(m.sub_budget);
+                  const phaseProgress = subBudget > 0 ? Math.min(100, Math.round((phaseSpent / subBudget) * 100)) : 0;
+
+                  return (
+                    <div key={m.id} className="p-3 bg-gray-50 rounded-lg border border-gray-100 space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-semibold text-gray-900">{m.phase_name}</span>
+                        <span className="font-medium text-gray-600">
+                          Spent: <strong className="text-emerald-600">{m.currency} {phaseSpent.toLocaleString()}</strong> / {m.currency} {subBudget.toLocaleString()} ({phaseProgress}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-500" 
+                          style={{ width: `${phaseProgress}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -632,7 +684,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* Transaction & Transfer Form */}
+      {/* Transaction & Transfer Form with Phase Selection */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
         <div className="flex justify-between items-center border-b border-gray-100 pb-3">
           <h2 className="text-xl font-semibold text-gray-800">
@@ -677,10 +729,13 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Project Link (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Project Link</label>
                   <select
                     value={selectedProjectId}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedProjectId(e.target.value);
+                      setSelectedMilestoneId('none'); // reset phase when project changes
+                    }}
                     className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
                   >
                     <option value="none">None (Household)</option>
@@ -692,6 +747,25 @@ export default function Home() {
                   </select>
                 </div>
               </div>
+
+              {/* Conditional Phase Milestone Selector when Mahusekwa is selected */}
+              {selectedProjectId === mahusekwaProject?.id && mahusekwaMilestones.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Farm Phase / Milestone</label>
+                  <select
+                    value={selectedMilestoneId}
+                    onChange={(e) => setSelectedMilestoneId(e.target.value)}
+                    className="w-full p-2 border border-emerald-300 bg-emerald-50 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-gray-900"
+                  >
+                    <option value="none">General Farm Expense (No Phase)</option>
+                    {mahusekwaMilestones.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.phase_name} (Sub-budget: {m.currency} {Number(m.sub_budget).toLocaleString()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -790,7 +864,7 @@ export default function Home() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
             <input
               type="text"
-              placeholder={actionType === 'standard' ? "e.g. Car loan installment" : "e.g. Monthly savings allocation"}
+              placeholder={actionType === 'standard' ? "e.g. Solar inverter & batteries" : "e.g. Monthly savings allocation"}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 bg-white"
@@ -807,7 +881,7 @@ export default function Home() {
         </form>
       </section>
 
-      {/* Recent Transactions Feed with Remittance Metadata */}
+      {/* Recent Transactions Feed with Phase Badges */}
       <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h2 className="text-xl font-semibold text-gray-800">Recent Activity</h2>
@@ -850,6 +924,7 @@ export default function Home() {
               const txType = tx.type || tx.transaction_type;
               const isIncome = txType === 'income';
               const projName = getProjectName(tx.project_id);
+              const milestoneName = getMilestoneName(tx.milestone_id);
               const curr = getAccountCurrency(tx.account_id);
               return (
                 <div key={tx.id} className="py-3 flex justify-between items-center text-sm">
@@ -864,6 +939,11 @@ export default function Home() {
                       {projName && (
                         <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium border border-emerald-200">
                           🌱 {projName}
+                        </span>
+                      )}
+                      {milestoneName && (
+                        <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-medium border border-blue-200">
+                          📌 {milestoneName}
                         </span>
                       )}
                       <span>• {getAccountName(tx.account_id)} • {new Date(tx.created_at).toLocaleDateString()}</span>
