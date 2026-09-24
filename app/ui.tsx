@@ -65,13 +65,12 @@ async function loadHousehold(userId: string) {
   const { data: projs } = await supabase.from("projects").select("*").eq("household_id", member.household_id);
   setProjects(projs || []);
 
-  const { data: t } = await supabase.from("transactions").select(`
-      *,
-      profiles:created_by (full_name)
-    `)
-    .eq("household_id", member.household_id)
-    .order("transaction_date", { ascending: false });
-  setTxs((t || []) as Tx[]);
+const { data: t } = await supabase.from("transactions").select(`
+  *,
+  profiles:profile_id (full_name)
+`)
+.eq("household_id", member.household_id)
+.order("date", { ascending: false });
 
   setLoading(false);
 }
@@ -99,6 +98,11 @@ async function loadHousehold(userId: string) {
     if (error) setMessage(error.message);
     else { setMessage("Saved."); await loadHousehold(session.user.id); setTab("transactions"); }
   }
+const joinHousehold = async (inviteCode: string) => {
+    // Add your join logic here or use a placeholder
+    console.log("Joining household with code:", inviteCode);
+  };
+
 
   if (!session) return <AuthScreen supabase={supabase} mode={authMode} setMode={setAuthMode} />;
   if (loading) return <div className="center"><div className="spinner"/><p>Loading Hey Jude…</p></div>;
@@ -344,7 +348,7 @@ function TxRow({ t }: { t: any }) {
       setForm((x:any)=>({...x, amount:x.amount||amount, description:x.description||text}));
     };
     recognition.start();
-  }
+  
   return <div>
     <div className="pageTitle"><h2>Capture money</h2><p>Receipt first. Voice or manual entry when there is no receipt.</p></div>
     <div className="captureGrid">
@@ -364,7 +368,7 @@ function TxRow({ t }: { t: any }) {
       <button className="primary" disabled={!form.amount} onClick={()=>onSave({...form,receiptFile:file})}>Save transaction</button>
     </div>
   </div>
-
+  
 function Transactions({txs}:{txs:Tx[],people:Person[]}) {
   const [q,setQ]=useState("");
   const filtered=txs.filter(t=>`${t.description} ${t.category} ${t.account_name||""} ${t.project||""}`.toLowerCase().includes(q.toLowerCase()));
@@ -391,5 +395,5 @@ function Assistant({txs,household}:{txs:Tx[],household:Household}) {
   const suggestions=["How much did we spend this month?","Who has paid what?","How much have we put into Zimbabwe?","What are our biggest expense categories?"];
   return <div><div className="pageTitle"><h2>Ask Jude</h2><p>Ask questions about the household record.</p></div><div className="suggestions">{suggestions.map(s=><button key={s} onClick={()=>setQ(s)}>{s}</button>)}</div><div className="card chat"><textarea placeholder="Ask anything about the recorded finances…" value={q} onChange={e=>setQ(e.target.value)}/><button className="primary" onClick={ask} disabled={busy||!q.trim()}>{busy?"Thinking…":"Ask Hey Jude"}</button>{answer&&<div className="answer"><b>Hey Jude</b><p>{answer}</p></div>}</div></div>
 }
-
+  }
 export default AppShell;
