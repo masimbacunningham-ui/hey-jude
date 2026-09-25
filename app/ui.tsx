@@ -47,16 +47,42 @@ function Capture({ supabase, householdId }: { supabase: any; householdId: string
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    setSuccessMessage('');
+
+    try {
+      const payload = {
+        household_id: householdId || 'default-household',
+        record_type: captureType,
+        type: captureType === 'transaction' ? type : captureType === 'loan' ? loanType : 'milestone',
+        category: captureType === 'transaction' ? category : captureType === 'milestone' ? milestoneProject : 'Loan',
+        currency: currency,
+        amount: captureType === 'transaction' ? parseFloat(amount) || 0 : captureType === 'loan' ? parseFloat(loanAmount) || 0 : 0,
+        description: captureType === 'transaction' ? description : captureType === 'loan' ? `Loan with ${loanParty}` : milestoneTitle,
+        counterparty: captureType === 'loan' ? loanParty : null,
+        target_date: captureType === 'milestone' ? milestoneDate : null,
+      };
+
+      const { error } = await supabase.from('transactions').insert([payload]);
+
+      if (error) throw error;
+
       setLoading(false);
-      setSuccessMessage(`${captureType.charAt(0).toUpperCase() + captureType.slice(1)} logged successfully!`);
+      setSuccessMessage(`${captureType.charAt(0).toUpperCase() + captureType.slice(1)} saved to Supabase successfully!`);
+      
+      // Reset fields
       setDescription('');
       setAmount('');
       setLoanParty('');
       setLoanAmount('');
       setMilestoneTitle('');
-      setTimeout(() => setSuccessMessage(''), 3000);
-    }, 500);
+      setMilestoneDate('');
+
+      setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (err: any) {
+      console.error('Error saving to Supabase:', err);
+      setLoading(false);
+      setSuccessMessage(`Error: ${err.message || 'Could not save record.'}`);
+    }
   };
 
   return (
