@@ -1,8 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
-function speak() {
+// Connect directly to Supabase so it's always ready
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
   // audio or speech helper placeholder
 }
 
@@ -15,7 +19,8 @@ function Home({ supabase, householdId }: { supabase: any; householdId: string })
   );
 }
 
-function Capture({ supabase, householdId }: { supabase: any; householdId: string }) {
+function Capture() {
+  const householdId = 'default-household';
   const [captureType, setCaptureType] = useState('transaction'); // 'transaction' | 'loan' | 'milestone'
 
   // Transaction states
