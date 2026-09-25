@@ -3,39 +3,90 @@
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Connect directly to Supabase so it's always ready
+// Initialize Supabase directly inside the file so it's always ready
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
-  // audio or speech helper placeholder
-}
 
-function Home({ supabase, householdId }: { supabase: any; householdId: string }) {
+export default function AppShell() {
+  const [activeTab, setActiveTab] = useState('capture');
+
   return (
-    <div className="p-6 pb-24 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-gray-800">Home Dashboard</h2>
-      <p className="text-gray-600">Welcome to your operational overview.</p>
+    <div className="min-h-screen bg-gray-50 pb-20">
+      {/* Top Header */}
+      <header className="bg-white border-b border-gray-200 px-6 py-4">
+        <h1 className="text-xl font-bold text-gray-900">Hey Jude</h1>
+        <p className="text-xs text-gray-500">Cunningham & Lynne</p>
+      </header>
+
+      {/* Main Content Area */}
+      <main>
+        {activeTab === 'capture' && <Capture />}
+        {activeTab === 'money' && (
+          <div className="p-6 max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold text-gray-900">Money Dashboard</h2>
+            <p className="text-gray-600">Multi-currency financial overview coming up next.</p>
+          </div>
+        )}
+        {activeTab === 'zimbabwe' && (
+          <div className="p-6 max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold text-gray-900">Mahusekwa Farm & Zimbabwe</h2>
+            <p className="text-gray-600">Farm infrastructure and project updates.</p>
+          </div>
+        )}
+        {activeTab === 'ask jude' && (
+          <div className="p-6 max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold text-gray-900">Ask Jude</h2>
+            <p className="text-gray-600">Your AI assistant and advisor.</p>
+          </div>
+        )}
+      </main>
+
+      {/* Bottom Navigation Bar */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around py-3 z-50">
+        <button 
+          onClick={() => setActiveTab('capture')}
+          className={`text-xs font-medium flex flex-col items-center ${activeTab === 'capture' ? 'text-blue-600 font-bold' : 'text-gray-600'}`}
+        >
+          <span className="text-lg">+</span> Capture
+        </button>
+        <button 
+          onClick={() => setActiveTab('money')}
+          className={`text-xs font-medium flex flex-col items-center ${activeTab === 'money' ? 'text-blue-600 font-bold' : 'text-gray-600'}`}
+        >
+          <span className="text-lg">💳</span> Money
+        </button>
+        <button 
+          onClick={() => setActiveTab('zimbabwe')}
+          className={`text-xs font-medium flex flex-col items-center ${activeTab === 'zimbabwe' ? 'text-blue-600 font-bold' : 'text-gray-600'}`}
+        >
+          <span className="text-lg">ZW</span> Zimbabwe
+        </button>
+        <button 
+          onClick={() => setActiveTab('ask jude')}
+          className={`text-xs font-medium flex flex-col items-center ${activeTab === 'ask jude' ? 'text-blue-600 font-bold' : 'text-gray-600'}`}
+        >
+          <span className="text-lg">✨</span> Ask Jude
+        </button>
+      </nav>
     </div>
   );
 }
 
 function Capture() {
   const householdId = 'default-household';
-  const [captureType, setCaptureType] = useState('transaction'); // 'transaction' | 'loan' | 'milestone'
+  const [captureType, setCaptureType] = useState('transaction');
 
-  // Transaction states
   const [type, setType] = useState('expense');
   const [currency, setCurrency] = useState('ZAR');
   const [category, setCategory] = useState('Farm');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
 
-  // Loan states
   const [loanParty, setLoanParty] = useState('');
   const [loanAmount, setLoanAmount] = useState('');
-  const [loanType, setLoanType] = useState('borrowed'); // 'borrowed' | 'lent'
+  const [loanType, setLoanType] = useState('borrowed');
 
-  // Milestone states
   const [milestoneProject, setMilestoneProject] = useState('Mahusekwa Farm');
   const [milestoneTitle, setMilestoneTitle] = useState('');
   const [milestoneDate, setMilestoneDate] = useState('');
@@ -56,7 +107,7 @@ function Capture() {
 
     try {
       const payload = {
-        household_id: householdId || 'default-household',
+        household_id: householdId,
         record_type: captureType,
         type: captureType === 'transaction' ? type : captureType === 'loan' ? loanType : 'milestone',
         category: captureType === 'transaction' ? category : captureType === 'milestone' ? milestoneProject : 'Loan',
@@ -74,7 +125,6 @@ function Capture() {
       setLoading(false);
       setSuccessMessage(`${captureType.charAt(0).toUpperCase() + captureType.slice(1)} saved to Supabase successfully!`);
       
-      // Reset fields
       setDescription('');
       setAmount('');
       setLoanParty('');
@@ -96,12 +146,11 @@ function Capture() {
       <p className="text-gray-600 mb-6">Log multi-currency financials (ZAR, USD, EUR), track loans, or record milestones.</p>
       
       {successMessage && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm font-medium">
+        <div className={`mb-4 p-3 rounded-lg text-sm font-medium ${successMessage.startsWith('Error') ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700'}`}>
           {successMessage}
         </div>
       )}
 
-      {/* Mode Selector Tabs */}
       <div className="flex rounded-lg bg-gray-200 p-1 mb-6">
         <button
           type="button"
@@ -128,7 +177,6 @@ function Capture() {
 
       <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-5">
         
-        {/* TRANSACTION FORM FIELDS */}
         {captureType === 'transaction' && (
           <>
             <div className="flex rounded-lg bg-gray-100 p-1">
@@ -203,7 +251,6 @@ function Capture() {
           </>
         )}
 
-        {/* LOAN TRACKING FORM FIELDS */}
         {captureType === 'loan' && (
           <>
             <div className="flex rounded-lg bg-gray-100 p-1">
@@ -264,7 +311,6 @@ function Capture() {
           </>
         )}
 
-        {/* MILESTONE FORM FIELDS */}
         {captureType === 'milestone' && (
           <>
             <div>
@@ -305,7 +351,6 @@ function Capture() {
           </>
         )}
 
-        {/* Submit Button */}
         <button 
           type="submit" 
           disabled={loading}
@@ -314,97 +359,6 @@ function Capture() {
           {loading ? 'Saving...' : `Save ${captureType.charAt(0).toUpperCase() + captureType.slice(1)}`}
         </button>
       </form>
-    </div>
-  );
-}
-
-function Transactions({ supabase, householdId }: { supabase: any; householdId: string }) {
-  return (
-    <div className="p-6 pb-24 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-gray-800">Transactions</h2>
-      <p className="text-gray-600">Financial records will appear here.</p>
-    </div>
-  );
-}
-
-function Zimbabwe({ txs, onSave }: { txs: any[]; onSave: (x: any) => void }) {
-  return (
-    <div className="p-6 pb-24 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-gray-800">Zimbabwe Project</h2>
-      <p className="text-gray-600">Mahusekwa farm estate updates will appear here.</p>
-    </div>
-  );
-}
-
-function Assistant({ supabase, householdId }: { supabase: any; householdId: string }) {
-  return (
-    <div className="p-6 pb-24 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-gray-800">Ask Jude</h2>
-      <p className="text-gray-600">Your AI assistant interface will appear here.</p>
-    </div>
-  );
-}
-
-export default function AppShell({ supabase, householdId }: { supabase: any; householdId: string }) {
-  const [activeTab, setActiveTab] = useState('home');
-
-  return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Hey Jude</h1>
-          <p className="text-xs text-gray-500">Cunningham &amp; Lynne</p>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="pb-12">
-        {activeTab === 'home' && <Home supabase={supabase} householdId={householdId} />}
-        {activeTab === 'capture' && <Capture supabase={supabase} householdId={householdId} />}
-        {activeTab === 'transactions' && <Transactions supabase={supabase} householdId={householdId} />}
-        {activeTab === 'zimbabwe' && <Zimbabwe txs={[]} onSave={() => {}} />}
-        {activeTab === 'assistant' && <Assistant supabase={supabase} householdId={householdId} />}
-      </main>
-
-      {/* Bottom Navigation Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center py-2 px-2 shadow-xl z-50">
-        <button
-          onClick={() => setActiveTab('home')}
-          className={`flex flex-col items-center justify-center w-16 py-1 text-xs font-medium transition-colors ${activeTab === 'home' ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-900'}`}
-        >
-          <span className="text-base mb-0.5">🏠</span>
-          <span>Home</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('capture')}
-          className={`flex flex-col items-center justify-center w-16 py-1 text-xs font-medium transition-colors ${activeTab === 'capture' ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-900'}`}
-        >
-          <span className="text-base mb-0.5">➕</span>
-          <span>Capture</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('transactions')}
-          className={`flex flex-col items-center justify-center w-16 py-1 text-xs font-medium transition-colors ${activeTab === 'transactions' ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-900'}`}
-        >
-          <span className="text-base mb-0.5">💳</span>
-          <span>Money</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('zimbabwe')}
-          className={`flex flex-col items-center justify-center w-16 py-1 text-xs font-medium transition-colors ${activeTab === 'zimbabwe' ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-900'}`}
-        >
-          <span className="text-xs font-bold mb-0.5 px-1 bg-gray-100 rounded text-gray-700">ZW</span>
-          <span>Zimbabwe</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('assistant')}
-          className={`flex flex-col items-center justify-center w-16 py-1 text-xs font-medium transition-colors ${activeTab === 'assistant' ? 'text-indigo-600' : 'text-gray-500 hover:text-gray-900'}`}
-        >
-          <span className="text-base mb-0.5">✨</span>
-          <span>Ask Jude</span>
-        </button>
-      </nav>
     </div>
   );
 }
