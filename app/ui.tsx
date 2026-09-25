@@ -1,7 +1,8 @@
- "use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "../lib/supabase/client";
+import Transactions from "./Transactions";
 
 type Tab = "home" | "capture" | "transactions" | "zimbabwe" | "assistant";
 type Person = { id: string; name: string };
