@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Hey Jude
 
 **Hey Jude — Your household financial assistant**
@@ -98,3 +99,7 @@ The foundation is ready for:
 - native App Store / Google Play packaging
 
 Do not treat an AI-extracted receipt as final until the user confirms it. The UI is designed around that principle.
+=======
+# hey-jude
+Shared household financial assistant
+>>>>>>> 5dcb09e4c71c4f1415817fcfba3f12cec24a9961
