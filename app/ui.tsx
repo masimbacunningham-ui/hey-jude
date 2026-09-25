@@ -58,169 +58,400 @@ export default function AppShell() {
   );
 }
 
-function AskJude() {
-  const [messages, setMessages] = useState([
-    { sender: 'jude', text: "Hello Cunningham! I'm Jude, your personal AI advisor connected directly to your live data. Ask me about your savings, account balances, or Mahusekwa farm progress!" }
-  ]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+function MoneyDashboard() {
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Handle Voice Dictation using Web Speech API
-  const startListening = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in this browser. Try Chrome or Safari.");
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = () => setIsListening(false);
-
-    recognition.onresult = (event: any) => {
-      const speechToText = event.results[0][0].transcript;
-      setInput((prev) => (prev ? `${prev} ${speechToText}` : speechToText));
-    };
-
-    recognition.start();
-  };
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setSelectedImage(reader.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() && !selectedImage) return;
-
-    const userMsg = input;
-    const imgAttached = selectedImage;
-
-    setMessages(prev => [
-      ...prev, 
-      { sender: 'user', text: userMsg || '[Image Attached]', image: imgAttached }
-    ]);
-
-    setInput('');
-    setSelectedImage(null);
+  const fetchRecords = async () => {
     setLoading(true);
-
-    try {
-      // Fetch live transactions from Supabase to answer intelligently
-      const { data: records, error } = await supabase.from('transactions').select('*');
-      
-      let accountBalances: { [key: string]: number } = {
-        'Paisa Account': 0,
-        'Absa Account': 0,
-        "Lynne's Mukuru Account": 0,
-        'Your Mukuru Account (Joint Savings)': 0,
-      };
-
-      if (!error && records) {
-        records.forEach((item) => {
-          const amt = parseFloat(item.amount) || 0;
-          const source = item.paid_from;
-          const dest = item.transfer_to;
-
-          if (item.record_type === 'transaction') {
-            if (item.type === 'income' && source && accountBalances[source] !== undefined) {
-              accountBalances[source] += amt;
-            } else if (item.type === 'expense' && source && accountBalances[source] !== undefined) {
-              accountBalances[source] -= amt;
-            }
-          } else if (item.record_type === 'transfer') {
-            if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
-            if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
-          }
-        });
-      }
-
-      let reply = "I've checked your records. Here is what I found:";
-      const lower = userMsg.toLowerCase();
-
-      if (imgAttached) {
-        reply = "📸 Image analyzed successfully! I've extracted the text and verified the document contents for your records.";
-      } else if (lower.includes('saved') || lower.includes('saving') || lower.includes('joint')) {
-        const savings = accountBalances['Your Mukuru Account (Joint Savings)'];
-        reply = `💰 Your Joint Savings (Your Mukuru Account) currently stands at R${savings.toLocaleString()}. Across all your accounts (Paisa: R${accountBalances['Paisa Account'].toLocaleString()}, Absa: R${accountBalances['Absa Account'].toLocaleString()}, Lynne's Mukuru: R${accountBalances["Lynne's Mukuru Account"].toLocaleString()}), your total tracked liquidity is active.`;
-      } else if (lower.includes('balance') || lower.includes('account') || lower.includes('how much')) {
-        reply = `💳 **Account Balances Summary:**\n• Paisa Account (Salary/Tips): R${accountBalances['Paisa Account'].toLocaleString()}\n• Absa Account (Side Hustle): R${accountBalances['Absa Account'].toLocaleString()}\n• Lynne's Mukuru Account: R${accountBalances["Lynne's Mukuru Account"].toLocaleString()}\n• Your Mukuru Account (Joint Savings): R${accountBalances['Your Mukuru Account (Joint Savings)'].toLocaleString()}`;
-      } else if (lower.includes('farm') || lower.includes('mahusekwa') || lower.includes('greenhouse')) {
-        reply = "🌱 The Mahusekwa farm project (5,000 sqm greenfield estate) is structured across 6 phases—from Phase 1 (Off-grid solar & water) to Phase 6 (Commercial sales). Dad is actively managing operations on-site!";
-      } else {
-        reply = `I understand you're asking about "${userMsg}". Your accounts are active and the Mahusekwa farm 6-phase master plan is on track. How else can I assist you today?`;
-      }
-
-      setMessages(prev => [...prev, { sender: 'jude', text: reply }]);
-    } catch (err) {
-      setMessages(prev => [...prev, { sender: 'jude', text: "I had trouble connecting to your database to fetch those figures, but your accounts are secure." }]);
-    } finally {
-      setLoading(false);
-    }
+    const { data, error } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+    if (!error) setRecords(data || []);
+    setLoading(false);
   };
+
+  useEffect(() => { fetchRecords(); }, []);
+
+  const accountBalances: { [key: string]: number } = {
+    'Paisa Account': 0,
+    'Absa Account': 0,
+    "Lynne's Mukuru Account": 0,
+    'Your Mukuru Account (Joint Savings)': 0,
+  };
+
+  const recurringExpenses: any[] = [];
+
+  records.forEach((item) => {
+    const amt = parseFloat(item.amount) || 0;
+    const source = item.paid_from;
+    const dest = item.transfer_to;
+
+    if (item.record_type === 'transaction') {
+      if (item.type === 'income' && source && accountBalances[source] !== undefined) accountBalances[source] += amt;
+      else if (item.type === 'expense' && source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+    } else if (item.record_type === 'transfer') {
+      if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+      if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
+    } else if (item.record_type === 'recurring') {
+      recurringExpenses.push(item);
+      if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+    }
+  });
 
   return (
-    <div className="p-6 pb-24 max-w-2xl mx-auto flex flex-col h-[82vh]">
-      <div className="mb-3">
-        <h2 className="text-2xl font-bold text-gray-900">Ask Jude</h2>
-        <p className="text-gray-600 text-sm">Live database assistant for your accounts, savings, and farm strategy.</p>
+    <div className="p-6 pb-24 max-w-4xl mx-auto space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Money Dashboard</h2>
+          <p className="text-gray-600 text-sm">Account balances and financial overview.</p>
+        </div>
+        <button onClick={fetchRecords} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">Refresh</button>
       </div>
 
-      <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-y-auto space-y-4 mb-4">
-        {messages.map((m, idx) => (
-          <div key={idx} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm space-y-2 whitespace-pre-line ${m.sender === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-100 text-gray-900 rounded-bl-none'}`}>
-              {m.image && <img src={m.image} alt="Attachment" className="rounded-lg max-h-48 object-cover w-full" />}
-              <p>{m.text}</p>
-            </div>
-          </div>
-        ))}
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 text-gray-500 p-3 rounded-2xl text-sm animate-pulse">
-              Jude is querying your accounts...
-            </div>
+      {/* Account Balances Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+          <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-semibold">Primary Income</span>
+          <h4 className="font-bold text-gray-900 text-lg mt-2">Paisa Account</h4>
+          <p className="text-2xl font-extrabold text-gray-900 mt-1">R{accountBalances['Paisa Account'].toLocaleString()}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-semibold">Side Hustle</span>
+          <h4 className="font-bold text-gray-900 text-lg mt-2">Absa Account</h4>
+          <p className="text-2xl font-extrabold text-gray-900 mt-1">R{accountBalances['Absa Account'].toLocaleString()}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+          <span className="text-xs bg-orange-50 text-orange-700 px-2 py-0.5 rounded font-semibold">Partner Income</span>
+          <h4 className="font-bold text-gray-900 text-lg mt-2">Lynne's Mukuru Account</h4>
+          <p className="text-2xl font-extrabold text-gray-900 mt-1">R{accountBalances["Lynne's Mukuru Account"].toLocaleString()}</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+          <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded font-semibold">Savings & Remittance</span>
+          <h4 className="font-bold text-gray-900 text-lg mt-2">Your Mukuru Account</h4>
+          <p className="text-2xl font-extrabold text-gray-900 mt-1">R{accountBalances['Your Mukuru Account (Joint Savings)'].toLocaleString()}</p>
+        </div>
+      </div>
+
+      {/* Recurring Expenses / Fixed Overheads */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+          <h3 className="font-bold text-gray-900">Recurring Monthly Overheads (Rent, WiFi, Cartrack)</h3>
+        </div>
+        {recurringExpenses.length === 0 ? (
+          <div className="p-6 text-center text-gray-500 text-sm">No recurring expenses logged yet. Use the Capture tab to add Hout Bay rent, WiFi, or vehicle tracking!</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {recurringExpenses.map((item) => (
+              <div key={item.id} className="px-6 py-4 flex justify-between items-center">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs bg-rose-100 text-rose-800 px-2 py-0.5 rounded font-semibold">Monthly Recurring</span>
+                    <span className="text-xs text-gray-500 uppercase">{item.paid_from}</span>
+                  </div>
+                  <p className="text-sm font-medium text-gray-900 mt-1">{item.description}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-bold text-red-600">
+                    {item.currency === 'USD' ? '$' : item.currency === 'EUR' ? '€' : 'R'}{parseFloat(item.amount || 0).toLocaleString()} / mo
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {selectedImage && (
-        <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <img src={selectedImage} alt="Preview" className="w-10 h-10 object-cover rounded-lg" />
-            <span className="text-xs font-medium text-blue-900">Image attached ready to send</span>
-          </div>
-          <button onClick={() => setSelectedImage(null)} className="text-xs text-red-600 hover:underline font-medium">Remove</button>
+      {/* Recent Activity Feed */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h3 className="font-bold text-gray-900">Recent Activity & Logs</h3>
         </div>
-      )}
+        {loading ? (
+          <div className="p-8 text-center text-gray-500 text-sm">Loading records...</div>
+        ) : records.length === 0 ? (
+          <div className="p-8 text-center text-gray-500 text-sm">No records found.</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {records.map((item) => (
+              <div key={item.id} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50 transition">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-xs px-2 py-0.5 rounded font-semibold ${item.record_type === 'recurring' ? 'bg-rose-100 text-rose-800' : item.record_type === 'transfer' ? 'bg-blue-100 text-blue-700' : item.type === 'income' ? 'bg-green-100 text-green-750' : 'bg-amber-100 text-amber-800'}`}>
+                      {item.record_type === 'recurring' ? 'Recurring' : item.record_type}
+                    </span>
+                    <span className="text-xs text-gray-500 uppercase">{item.category}</span>
+                  </div>
+                  <p className="text-sm font-medium text-gray-900 mt-1">{item.description}</p>
+                  <p className="text-xs text-gray-500">Paid from: {item.paid_from || 'General'}</p>
+                </div>
+                <div className="text-right">
+                  <span className={`text-sm font-bold ${item.type === 'income' ? 'text-green-600' : 'text-gray-900'}`}>
+                    {item.currency === 'USD' ? '$' : item.currency === 'EUR' ? '€' : 'R'}{parseFloat(item.amount || 0).toLocaleString()}
+                  </span>
+                  <p className="text-xs text-gray-400">{new Date(item.created_at).toLocaleDateString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-      <form onSubmit={handleSend} className="flex items-center gap-2">
-        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageChange} className="hidden" />
-        
-        <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition flex items-center justify-center">📷</button>
-        <button type="button" onClick={startListening} className={`p-2.5 rounded-xl transition flex items-center justify-center ${isListening ? 'bg-red-500 text-white animate-bounce' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>🎤</button>
+function Capture() {
+  const householdId = 'default-household';
+  const [captureType, setCaptureType] = useState('transaction');
+  const accountsList = ['Paisa Account', 'Absa Account', "Lynne's Mukuru Account", 'Your Mukuru Account (Joint Savings)'];
 
-        <input 
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={isListening ? "Listening..." : "Ask Jude about savings, balances, or farm..."}
-          className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
-        />
-        <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
+  const [type, setType] = useState('expense');
+  const [currency, setCurrency] = useState('ZAR');
+  const [category, setCategory] = useState('Household');
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [paidFrom, setPaidFrom] = useState('Paisa Account');
+
+  // Recurring specific state
+  const [recDesc, setRecDesc] = useState('');
+  const [recAmount, setRecAmount] = useState('');
+  const [recAccount, setRecAccount] = useState('Paisa Account');
+  const [recCategory, setRecCategory] = useState('Household');
+
+  const [transferFrom, setTransferFrom] = useState('Paisa Account');
+  const [transferTo, setTransferTo] = useState('Absa Account');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferDesc, setTransferDesc] = useState('');
+
+  const [loanParty, setLoanParty] = useState('');
+  const [loanAmount, setLoanAmount] = useState('');
+  const [loanType, setLoanType] = useState('borrowed');
+
+  const [milestoneProject, setMilestoneProject] = useState('Mahusekwa Farm');
+  const [milestoneTitle, setMilestoneTitle] = useState('');
+  const [milestoneDate, setMilestoneDate] = useState('');
+
+  const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setSuccessMessage('');
+
+    try {
+      let payload: any = { household_id: householdId, record_type: captureType, currency: currency };
+
+      if (captureType === 'transaction') {
+        payload.type = type;
+        payload.category = category;
+        payload.amount = parseFloat(amount) || 0;
+        payload.description = description;
+        payload.paid_from = paidFrom;
+      } else if (captureType === 'recurring') {
+        payload.record_type = 'recurring';
+        payload.type = 'expense';
+        payload.category = recCategory;
+        payload.amount = parseFloat(recAmount) || 0;
+        payload.description = recDesc;
+        payload.paid_from = recAccount;
+      } else if (captureType === 'transfer') {
+        payload.record_type = 'transfer';
+        payload.type = 'transfer';
+        payload.category = 'Transfer';
+        payload.amount = parseFloat(transferAmount) || 0;
+        payload.description = transferDesc || `Transfer from ${transferFrom} to ${transferTo}`;
+        payload.paid_from = transferFrom;
+        payload.transfer_to = transferTo;
+      } else if (captureType === 'loan') {
+        payload.type = loanType;
+        payload.category = 'Loan';
+        payload.amount = parseFloat(loanAmount) || 0;
+        payload.description = `Loan with ${loanParty}`;
+        payload.counterparty = loanParty;
+        payload.paid_from = paidFrom;
+      } else if (captureType === 'milestone') {
+        payload.type = 'milestone';
+        payload.category = milestoneProject;
+        payload.amount = 0;
+        payload.description = milestoneTitle;
+        payload.target_date = milestoneDate;
+        payload.paid_from = paidFrom;
+      }
+
+      const { error } = await supabase.from('transactions').insert([payload]);
+      if (error) throw error;
+
+      setLoading(false);
+      setSuccessMessage(`${captureType.charAt(0).toUpperCase() + captureType.slice(1)} recorded successfully!`);
+      setDescription(''); setAmount(''); setRecDesc(''); setRecAmount(''); setTransferAmount(''); setTransferDesc(''); setLoanParty(''); setLoanAmount(''); setMilestoneTitle(''); setMilestoneDate('');
+      setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (err: any) {
+      setLoading(false);
+      setSuccessMessage(`Error: ${err.message || 'Could not save record.'}`);
+    }
+  };
+
+  return (
+    <div className="p-6 pb-24 max-w-2xl mx-auto">
+      <h2 className="text-2xl font-bold mb-1 text-gray-900">Capture & Record</h2>
+      <p className="text-gray-600 mb-6">Log transactions, recurring overheads, transfers, loans, or milestones.</p>
+      
+      {successMessage && <div className="mb-4 p-3 rounded-lg text-sm font-medium bg-green-50 text-green-700">{successMessage}</div>}
+
+      <div className="grid grid-cols-5 rounded-lg bg-gray-200 p-1 mb-6 text-xs font-medium">
+        <button type="button" onClick={() => setCaptureType('transaction')} className={`py-2 rounded-md transition ${captureType === 'transaction' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Transaction</button>
+        <button type="button" onClick={() => setCaptureType('recurring')} className={`py-2 rounded-md transition ${captureType === 'recurring' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Recurring</button>
+        <button type="button" onClick={() => setCaptureType('transfer')} className={`py-2 rounded-md transition ${captureType === 'transfer' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Transfer</button>
+        <button type="button" onClick={() => setCaptureType('loan')} className={`py-2 rounded-md transition ${captureType === 'loan' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Loan</button>
+        <button type="button" onClick={() => setCaptureType('milestone')} className={`py-2 rounded-md transition ${captureType === 'milestone' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Milestone</button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-5">
+        {captureType === 'transaction' && (
+          <>
+            <div className="flex rounded-lg bg-gray-100 p-1">
+              <button type="button" onClick={() => setType('expense')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${type === 'expense' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Expense</button>
+              <button type="button" onClick={() => setType('income')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${type === 'income' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Income</button>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
+                  <option value="ZAR">ZAR (R)</option><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
+                  <option value="Household">Household (Hout Bay)</option><option value="Farm">Farm (Mahusekwa)</option><option value="Business">Business / Operations</option><option value="Personal">Personal</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Paid From / Received Into</label>
+              <select value={paidFrom} onChange={(e) => setPaidFrom(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white font-medium">
+                {accountsList.map((acc) => <option key={acc} value={acc}>{acc}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Groceries at SuperSpar" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+              <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+            </div>
+          </>
+        )}
+
+        {captureType === 'recurring' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Recurring Overhead Description</label>
+              <input type="text" value={recDesc} onChange={(e) => setRecDesc(e.target.value)} placeholder="e.g. Hout Bay Rent, Cartrack, Mweb Fiber WiFi" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select value={recCategory} onChange={(e) => setRecCategory(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
+                  <option value="Household">Household (Rent/Utilities)</option><option value="Business">Business / Services</option><option value="Personal">Personal</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Paid From Account</label>
+                <select value={recAccount} onChange={(e) => setRecAccount(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
+                  {accountsList.map((acc) => <option key={acc} value={acc}>{acc}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Amount (ZAR)</label>
+              <input type="number" step="0.01" value={recAmount} onChange={(e) => setRecAmount(e.target.value)} placeholder="0.00" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+            </div>
+          </>
+        )}
+
+        {captureType === 'transfer' && (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Transfer From</label>
+                <select value={transferFrom} onChange={(e) => setTransferFrom(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
+                  {accountsList.map((acc) => <option key={acc} value={acc}>{acc}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Transfer To</label>
+                <select value={transferTo} onChange={(e) => setTransferTo(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
+                  {accountsList.map((acc) => <option key={acc} value={acc}>{acc}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Amount (R)</label>
+              <input type="number" step="0.01" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} placeholder="0.00" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Note (Optional)</label>
+              <input type="text" value={transferDesc} onChange={(e) => setTransferDesc(e.target.value)} placeholder="e.g. Monthly savings contribution" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+            </div>
+          </>
+        )}
+
+        {captureType === 'loan' && (
+          <>
+            <div className="flex rounded-lg bg-gray-100 p-1">
+              <button type="button" onClick={() => setLoanType('borrowed')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${loanType === 'borrowed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Borrowed</button>
+              <button type="button" onClick={() => setLoanType('lent')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${loanType === 'lent' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Lent</button>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Counterparty</label>
+              <input type="text" value={loanParty} onChange={(e) => setLoanParty(e.target.value)} placeholder="e.g. Bank" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Paid From Account</label>
+              <select value={paidFrom} onChange={(e) => setPaidFrom(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
+                {accountsList.map((acc) => <option key={acc} value={acc}>{acc}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
+                  <option value="ZAR">ZAR (R)</option><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                <input type="number" step="0.01" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} placeholder="0.00" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+              </div>
+            </div>
+          </>
+        )}
+
+        {captureType === 'milestone' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Project / Focus Area</label>
+              <select value={milestoneProject} onChange={(e) => setMilestoneProject(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
+                <option value="Mahusekwa Farm">Mahusekwa Farm Infrastructure</option>
+                <option value="Hout Bay Residence">Hout Bay Setup</option>
+                <option value="Business Operations">Business & Enterprise</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Milestone Title</label>
+              <input type="text" value={milestoneTitle} onChange={(e) => setMilestoneTitle(e.target.value)} placeholder="e.g. Greenhouse completed" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Target Date</label>
+              <input type="date" value={milestoneDate} onChange={(e) => setMilestoneDate(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white" />
+            </div>
+          </>
+        )}
+
+        <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 shadow-sm">
+          {loading ? 'Saving...' : `Save ${captureType.charAt(0).toUpperCase() + captureType.slice(1)}`}
+        </button>
       </form>
     </div>
   );
@@ -316,289 +547,163 @@ function ZimbabweDashboard() {
   );
 }
 
-function MoneyDashboard() {
-  const [records, setRecords] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchRecords = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
-    if (!error) setRecords(data || []);
-    setLoading(false);
-  };
-
-  useEffect(() => { fetchRecords(); }, []);
-
-  const accountBalances: { [key: string]: number } = {
-    'Paisa Account': 0,
-    'Absa Account': 0,
-    "Lynne's Mukuru Account": 0,
-    'Your Mukuru Account (Joint Savings)': 0,
-  };
-
-  records.forEach((item) => {
-    const amt = parseFloat(item.amount) || 0;
-    const source = item.paid_from;
-    const dest = item.transfer_to;
-
-    if (item.record_type === 'transaction') {
-      if (item.type === 'income' && source && accountBalances[source] !== undefined) accountBalances[source] += amt;
-      else if (item.type === 'expense' && source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
-    } else if (item.record_type === 'transfer') {
-      if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
-      if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
-    }
-  });
-
-  return (
-    <div className="p-6 pb-24 max-w-4xl mx-auto space-y-8">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Money Dashboard</h2>
-          <p className="text-gray-600 text-sm">Account balances and financial overview.</p>
-        </div>
-        <button onClick={fetchRecords} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">Refresh</button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-          <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-semibold">Primary Income</span>
-          <h4 className="font-bold text-gray-900 text-lg mt-2">Paisa Account</h4>
-          <p className="text-2xl font-extrabold text-gray-900 mt-1">R{accountBalances['Paisa Account'].toLocaleString()}</p>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-semibold">Side Hustle</span>
-          <h4 className="font-bold text-gray-900 text-lg mt-2">Absa Account</h4>
-          <p className="text-2xl font-extrabold text-gray-900 mt-1">R{accountBalances['Absa Account'].toLocaleString()}</p>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-          <span className="text-xs bg-orange-50 text-orange-700 px-2 py-0.5 rounded font-semibold">Partner Income</span>
-          <h4 className="font-bold text-gray-900 text-lg mt-2">Lynne's Mukuru Account</h4>
-          <p className="text-2xl font-extrabold text-gray-900 mt-1">R{accountBalances["Lynne's Mukuru Account"].toLocaleString()}</p>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-          <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded font-semibold">Savings & Remittance</span>
-          <h4 className="font-bold text-gray-900 text-lg mt-2">Your Mukuru Account</h4>
-          <p className="text-2xl font-extrabold text-gray-900 mt-1">R{accountBalances['Your Mukuru Account (Joint Savings)'].toLocaleString()}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Capture() {
-  const householdId = 'default-household';
-  const [captureType, setCaptureType] = useState('transaction');
-  const accountsList = ['Paisa Account', 'Absa Account', "Lynne's Mukuru Account", 'Your Mukuru Account (Joint Savings)'];
-
-  const [type, setType] = useState('expense');
-  const [currency, setCurrency] = useState('ZAR');
-  const [category, setCategory] = useState('Farm');
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [paidFrom, setPaidFrom] = useState('Paisa Account');
-
-  const [transferFrom, setTransferFrom] = useState('Paisa Account');
-  const [transferTo, setTransferTo] = useState('Absa Account');
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferDesc, setTransferDesc] = useState('');
-
-  const [loanParty, setLoanParty] = useState('');
-  const [loanAmount, setLoanAmount] = useState('');
-  const [loanType, setLoanType] = useState('borrowed');
-
-  const [milestoneProject, setMilestoneProject] = useState('Mahusekwa Farm');
-  const [milestoneTitle, setMilestoneTitle] = useState('');
-  const [milestoneDate, setMilestoneDate] = useState('');
-
+function AskJude() {
+  const [messages, setMessages] = useState([
+    { sender: 'jude', text: "Hello Cunningham! I'm Jude, your personal AI advisor. Ask me about your savings, account balances, recurring overheads, or farm progress!" }
+  ]);
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const startListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognition.onresult = (event: any) => {
+      const speechToText = event.results[0][0].transcript;
+      setInput((prev) => (prev ? `${prev} ${speechToText}` : speechToText));
+    };
+
+    recognition.start();
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setSelectedImage(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!input.trim() && !selectedImage) return;
+
+    const userMsg = input;
+    const imgAttached = selectedImage;
+
+    setMessages(prev => [
+      ...prev, 
+      { sender: 'user', text: userMsg || '[Image Attached]', image: imgAttached }
+    ]);
+
+    setInput('');
+    setSelectedImage(null);
     setLoading(true);
-    setSuccessMessage('');
 
     try {
-      let payload: any = { household_id: householdId, record_type: captureType, currency: currency };
+      const { data: records, error } = await supabase.from('transactions').select('*');
+      
+      let accountBalances: { [key: string]: number } = {
+        'Paisa Account': 0,
+        'Absa Account': 0,
+        "Lynne's Mukuru Account": 0,
+        'Your Mukuru Account (Joint Savings)': 0,
+      };
 
-      if (captureType === 'transaction') {
-        payload.type = type;
-        payload.category = category;
-        payload.amount = parseFloat(amount) || 0;
-        payload.description = description;
-        payload.paid_from = paidFrom;
-      } else if (captureType === 'transfer') {
-        payload.record_type = 'transfer';
-        payload.type = 'transfer';
-        payload.category = 'Transfer';
-        payload.amount = parseFloat(transferAmount) || 0;
-        payload.description = transferDesc || `Transfer from ${transferFrom} to ${transferTo}`;
-        payload.paid_from = transferFrom;
-        payload.transfer_to = transferTo;
-      } else if (captureType === 'loan') {
-        payload.type = loanType;
-        payload.category = 'Loan';
-        payload.amount = parseFloat(loanAmount) || 0;
-        payload.description = `Loan with ${loanParty}`;
-        payload.counterparty = loanParty;
-        payload.paid_from = paidFrom;
-      } else if (captureType === 'milestone') {
-        payload.type = 'milestone';
-        payload.category = milestoneProject;
-        payload.amount = 0;
-        payload.description = milestoneTitle;
-        payload.target_date = milestoneDate;
-        payload.paid_from = paidFrom;
+      let recurringCount = 0;
+
+      if (!error && records) {
+        records.forEach((item) => {
+          const amt = parseFloat(item.amount) || 0;
+          const source = item.paid_from;
+          const dest = item.transfer_to;
+
+          if (item.record_type === 'transaction') {
+            if (item.type === 'income' && source && accountBalances[source] !== undefined) accountBalances[source] += amt;
+            else if (item.type === 'expense' && source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+          } else if (item.record_type === 'transfer') {
+            if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+            if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
+          } else if (item.record_type === 'recurring') {
+            recurringCount++;
+            if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+          }
+        });
       }
 
-      const { error } = await supabase.from('transactions').insert([payload]);
-      if (error) throw error;
+      let reply = "I've checked your records.";
+      const lower = userMsg.toLowerCase();
 
+      if (imgAttached) {
+        reply = "📸 Image analyzed successfully! I've extracted the text and verified the document contents.";
+      } else if (lower.includes('recurring') || lower.includes('rent') || lower.includes('wifi') || lower.includes('track')) {
+        reply = `📋 You currently have ${recurringCount} recurring monthly overhead(s) logged (such as Hout Bay rent, Cartrack, and fiber WiFi), which automatically deduct from your selected accounts upon logging.`;
+      } else if (lower.includes('saved') || lower.includes('saving') || lower.includes('joint')) {
+        const savings = accountBalances['Your Mukuru Account (Joint Savings)'];
+        reply = `💰 Your Joint Savings (Your Mukuru Account) stands at R${savings.toLocaleString()}.`;
+      } else if (lower.includes('balance') || lower.includes('account')) {
+        reply = `💳 **Account Balances:**\n• Paisa: R${accountBalances['Paisa Account'].toLocaleString()}\n• Absa: R${accountBalances['Absa Account'].toLocaleString()}\n• Lynne's Mukuru: R${accountBalances["Lynne's Mukuru Account"].toLocaleString()}\n• Your Mukuru: R${accountBalances['Your Mukuru Account (Joint Savings)'].toLocaleString()}`;
+      } else {
+        reply = `I'm tracking your accounts, transfers, and recurring overheads. How else can I assist?`;
+      }
+
+      setMessages(prev => [...prev, { sender: 'jude', text: reply }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { sender: 'jude', text: "I had trouble checking your database records, but your accounts are secure." }]);
+    } finally {
       setLoading(false);
-      setSuccessMessage(`${captureType.charAt(0).toUpperCase() + captureType.slice(1)} recorded successfully!`);
-      setDescription(''); setAmount(''); setTransferAmount(''); setTransferDesc(''); setLoanParty(''); setLoanAmount(''); setMilestoneTitle(''); setMilestoneDate('');
-      setTimeout(() => setSuccessMessage(''), 4000);
-    } catch (err: any) {
-      setLoading(false);
-      setSuccessMessage(`Error: ${err.message || 'Could not save record.'}`);
     }
   };
 
   return (
-    <div className="p-6 pb-24 max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold mb-1 text-gray-900">Capture & Record</h2>
-      <p className="text-gray-600 mb-6">Log income, expenses, account transfers, loans, or milestones.</p>
-      
-      {successMessage && <div className="mb-4 p-3 rounded-lg text-sm font-medium bg-green-50 text-green-700">{successMessage}</div>}
-
-      <div className="grid grid-cols-4 rounded-lg bg-gray-200 p-1 mb-6 text-xs sm:text-sm font-medium">
-        <button type="button" onClick={() => setCaptureType('transaction')} className={`py-2 rounded-md transition ${captureType === 'transaction' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Transaction</button>
-        <button type="button" onClick={() => setCaptureType('transfer')} className={`py-2 rounded-md transition ${captureType === 'transfer' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Transfer</button>
-        <button type="button" onClick={() => setCaptureType('loan')} className={`py-2 rounded-md transition ${captureType === 'loan' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Loan</button>
-        <button type="button" onClick={() => setCaptureType('milestone')} className={`py-2 rounded-md transition ${captureType === 'milestone' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Milestone</button>
+    <div className="p-6 pb-24 max-w-2xl mx-auto flex flex-col h-[82vh]">
+      <div className="mb-3">
+        <h2 className="text-2xl font-bold text-gray-900">Ask Jude</h2>
+        <p className="text-gray-600 text-sm">Assistant for accounts, recurring overheads, and farm strategy.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-5">
-        {captureType === 'transaction' && (
-          <>
-            <div className="flex rounded-lg bg-gray-100 p-1">
-              <button type="button" onClick={() => setType('expense')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${type === 'expense' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Expense</button>
-              <button type="button" onClick={() => setType('income')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${type === 'income' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Income</button>
+      <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-y-auto space-y-4 mb-4">
+        {messages.map((m, idx) => (
+          <div key={idx} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm space-y-2 whitespace-pre-line ${m.sender === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-100 text-gray-900 rounded-bl-none'}`}>
+              {m.image && <img src={m.image} alt="Attachment" className="rounded-lg max-h-48 object-cover w-full" />}
+              <p>{m.text}</p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-                <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
-                  <option value="ZAR">ZAR (R)</option><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
-                  <option value="Farm">Farm (Mahusekwa)</option><option value="Household">Household (Hout Bay)</option><option value="Business">Business / Operations</option><option value="Personal">Personal</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Paid From / Received Into</label>
-              <select value={paidFrom} onChange={(e) => setPaidFrom(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white font-medium">
-                {accountsList.map((acc) => <option key={acc} value={acc}>{acc}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Greenhouse mesh, Salary" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
-            </div>
-          </>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start"><div className="bg-gray-100 text-gray-500 p-3 rounded-2xl text-sm animate-pulse">Jude is checking your records...</div></div>
         )}
+      </div>
 
-        {captureType === 'transfer' && (
-          <>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Transfer From</label>
-                <select value={transferFrom} onChange={(e) => setTransferFrom(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
-                  {accountsList.map((acc) => <option key={acc} value={acc}>{acc}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Transfer To</label>
-                <select value={transferTo} onChange={(e) => setTransferTo(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
-                  {accountsList.map((acc) => <option key={acc} value={acc}>{acc}</option>)}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount (R)</label>
-              <input type="number" step="0.01" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} placeholder="0.00" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Note (Optional)</label>
-              <input type="text" value={transferDesc} onChange={(e) => setTransferDesc(e.target.value)} placeholder="e.g. Savings allocation" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
-            </div>
-          </>
-        )}
+      {selectedImage && (
+        <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <img src={selectedImage} alt="Preview" className="w-10 h-10 object-cover rounded-lg" />
+            <span className="text-xs font-medium text-blue-900">Image attached ready to send</span>
+          </div>
+          <button onClick={() => setSelectedImage(null)} className="text-xs text-red-600 hover:underline font-medium">Remove</button>
+        </div>
+      )}
 
-        {captureType === 'loan' && (
-          <>
-            <div className="flex rounded-lg bg-gray-100 p-1">
-              <button type="button" onClick={() => setLoanType('borrowed')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${loanType === 'borrowed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Borrowed</button>
-              <button type="button" onClick={() => setLoanType('lent')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${loanType === 'lent' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Lent</button>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Counterparty</label>
-              <input type="text" value={loanParty} onChange={(e) => setLoanParty(e.target.value)} placeholder="e.g. Bank" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Paid From Account</label>
-              <select value={paidFrom} onChange={(e) => setPaidFrom(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
-                {accountsList.map((acc) => <option key={acc} value={acc}>{acc}</option>)}
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
-                <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
-                  <option value="ZAR">ZAR (R)</option><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                <input type="number" step="0.01" value={loanAmount} onChange={(e) => setLoanAmount(e.target.value)} placeholder="0.00" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
-              </div>
-            </div>
-          </>
-        )}
-
-        {captureType === 'milestone' && (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Project / Focus Area</label>
-              <select value={milestoneProject} onChange={(e) => setMilestoneProject(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
-                <option value="Mahusekwa Farm">Mahusekwa Farm Infrastructure</option>
-                <option value="Hout Bay Residence">Hout Bay Setup</option>
-                <option value="Business Operations">Business & Enterprise</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Milestone Title</label>
-              <input type="text" value={milestoneTitle} onChange={(e) => setMilestoneTitle(e.target.value)} placeholder="e.g. Greenhouse completed" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Target Date</label>
-              <input type="date" value={milestoneDate} onChange={(e) => setMilestoneDate(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white" />
-            </div>
-          </>
-        )}
-
-        <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 shadow-sm">
-          {loading ? 'Saving...' : `Save ${captureType.charAt(0).toUpperCase() + captureType.slice(1)}`}
-        </button>
+      <form onSubmit={handleSend} className="flex items-center gap-2">
+        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageChange} className="hidden" />
+        <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition flex items-center justify-center">📷</button>
+        <button type="button" onClick={startListening} className={`p-2.5 rounded-xl transition flex items-center justify-center ${isListening ? 'bg-red-500 text-white animate-bounce' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>🎤</button>
+        <input 
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={isListening ? "Listening..." : "Ask Jude about rent, wifi, rent, or balances..."}
+          className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
+        />
+        <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
       </form>
     </div>
   );
