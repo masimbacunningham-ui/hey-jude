@@ -377,17 +377,7 @@ function Transactions({txs}:{txs:Tx[],people:Person[]}) {
 
 function Zimbabwe({txs,onSave}:{txs:Tx[],onSave:(x:Partial<Tx>)=>void}) {
   const [amount,setAmount]=useState(""); const [desc,setDesc]=useState(""); const [cat,setCat]=useState("House");
-  const total=txs.filter(t=>t.project==="Zimbabwe").reduce((s,t)=>s+(t.type==="expense"?t.amount:0),0);
-  return <div><div className="pageTitle"><h2>🇿🇼 Zimbabwe</h2><p>Keep the relocation/build project separate from household spending.</p></div>
-    <div className="projectHero"><span>Project spend</span><b>{money(total)}</b><small>Target can be configured later</small></div>
-    <div className="card form"><h3>Log project spending</h3><input inputMode="decimal" placeholder="Amount" value={amount} onChange={e=>setAmount(e.target.value)}/><input placeholder="What was it for?" value={desc} onChange={e=>setDesc(e.target.value)}/><select value={cat} onChange={e=>setCat(e.target.value)}>{["House","Fencing","Farm","Poultry","Greenhouses","Borehole / Water","Equipment","Other"].map(x=><option key={x}>{x}</option>)}</select><button className="primary" disabled={!amount||!desc} onClick={()=>{onSave({type:"expense",amount:Number(amount),description:desc,category:cat,project:"Zimbabwe"});setAmount("");setDesc("")}}>Add to Zimbabwe project</button></div>
-    <div className="card">{txs.filter(t=>t.project==="Zimbabwe").slice(0,20).map(t=><TxRow key={t.id} t={t}/>)}</div>
-  </div>
-}
-
-function Assistant({txs,household}:{txs:Tx[],household:Household}) {
-  const [q,setQ]=useState(""); const [answer,setAnswer]=useState(""); const [busy,setBusy]=useState(false);
- function Home({ supabase, householdId }: { supabase: any; householdId: string }) {
+function Home({ supabase, householdId }: { supabase: any; householdId: string }) {
   return (
     <div className="p-6 pb-24 max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold mb-4 text-gray-800">Home Dashboard</h2>
@@ -430,4 +420,4 @@ function Assistant({ supabase, householdId }: { supabase: any; householdId: stri
       <p className="text-gray-600">Your AI assistant interface will appear here.</p>
     </div>
   );
-}
+} 
