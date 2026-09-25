@@ -1,341 +1,36 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "../lib/supabase/client";
+import { useState } from 'react';
 
-type Tab = "home" | "capture" | "transactions" | "zimbabwe" | "assistant";
-type Person = { id: string; name: string };
-type Tx = {
-  id: string; type: "income" | "expense"; amount: number; description: string;
-  category: string; paid_by: string | null; account_name: string | null;
-  project: string | null; transaction_date: string; created_at: string;
-};
-type Household = { id: string; name: string; join_code: string };
-
-const money = (n:number, currency="ZAR") =>
-  new Intl.NumberFormat("en-ZA", { style:"currency", currency, maximumFractionDigits:2 }).format(n);
-
-function monthRange() {
-  const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
-  const start = d >= 25 ? new Date(y,m,25) : new Date(y,m-1,25);
-  const end = new Date(start.getFullYear(), start.getMonth()+1, 24);
-  return { start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10) };
-}
-
-export function AppShell() {
-  const supabase = useMemo(() => createClient(), []);
-  const [session, setSession] = useState<any>(null);
-  const [tab, setTab] = useState<Tab>("home");
-  const [household, setHousehold] = useState<Household|null>(null);
-  const [people, setPeople] = useState<Person[]>([]);
-  const [txs, setTxs] = useState<Tx[]>([]);
-  const [projects, setProjects] = useState<any[]>([]); // <--- Add this line here!
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
-  const [authMode, setAuthMode] = useState<"signin"|"signup">("signin");
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({data}) => {
-      setSession(data.session);
-      if (data.session) loadHousehold(data.session.user.id);
-      else setLoading(false);
-    });
-    const {data: listener} = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      if (s) loadHousehold(s.user.id);
-      else { setHousehold(null); setTxs([]); setLoading(false); }
-    });
-    return () => listener.subscription.unsubscribe();
-  }, [supabase]);
-async function createHousehold(name: string) {
-  const { data, error } = await supabase.rpc("create_household", { name });
-  if (error) return setMessage(error.message);
-  setMessage("Household created. Share the join code with Lynn");
-}
-
-async function loadHousehold(userId: string) {
-  setLoading(true);
-  const { data: member } = await supabase.from("household_member").select("household_id").eq("user_id", userId).limit(1).maybeSingle();
-  if (!member) { setLoading(false); return; }
-
-  const { data: h } = await supabase.from("households").select("*").eq("id", member.household_id).single();
-  setHousehold(h);
-
-  const { data: projs } = await supabase.from("projects").select("*").eq("household_id", member.household_id);
-  setProjects(projs || []);
-
-const { data: t } = await supabase.from("transactions").select(`
-  *,
-  profiles:profile_id (full_name)
-`)
-.eq("household_id", member.household_id)
-.order("date", { ascending: false });
-
-  setLoading(false);
-}
-  async function addTransaction(input:Partial<Tx> & { receiptFile?: File | null }) {
-    if (!household) return;
-    let receipt_path: string | null = null;
-    if (input.receiptFile) {
-      const safeName = input.receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-      receipt_path = `${household.id}/${crypto.randomUUID()}-${safeName}`;
-      const upload = await supabase.storage.from("receipts").upload(receipt_path, input.receiptFile, { upsert:false });
-      if (upload.error) return setMessage(`Receipt upload failed: ${upload.error.message}`);
-    }
-    const {error} = await supabase.from("transactions").insert({
-      household_id: household.id,
-      type: input.type || "expense",
-      amount: Number(input.amount || 0),
-      description: input.description || "Untitled",
-      category: input.category || "Other",
-      paid_by: input.paid_by || session.user.id,
-      account_name: input.account_name || null,
-      project: input.project || null,
-      transaction_date: input.transaction_date || new Date().toISOString().slice(0,10),
-      receipt_path
-    });
-    if (error) setMessage(error.message);
-    else { setMessage("Saved."); await loadHousehold(session.user.id); setTab("transactions"); }
-  }
-const joinHousehold = async (inviteCode: string) => {
-    // Add your join logic here or use a placeholder
-    console.log("Joining household with code:", inviteCode);
-  };
-
-
-  if (!session) return <AuthScreen supabase={supabase} mode={authMode} setMode={setAuthMode} />;
-  if (loading) return <div className="center"><div className="spinner"/><p>Loading Hey Jude…</p></div>;
-  if (!household) return <SetupScreen onCreate={createHousehold} onJoin={joinHousehold} message={message} />;
-
-  return (
-    <div className="app">
-      <header className="topbar">
-        <div><div className="brand">Hey Jude</div><div className="sub">{household.name}</div></div>
-        <button className="iconBtn" onClick={async()=>{await supabase.auth.signOut();}}>↪</button>
-      </header>
-
-      <main className="content">
-        {message && <button className="notice" onClick={()=>setMessage("")}>{message} ×</button>}
-       {tab==="capture" && <Capture people={people} projects={projects} onSave={addTransaction}/>}
-     
-        {tab==="transactions" && <Transactions txs={txs} people={people}/>}
-        {tab==="zimbabwe" && <Zimbabwe txs={txs} onSave={addTransaction}/>}
-        {tab==="assistant" && <Assistant txs={txs} household={household}/>}
-      </main>
-
-      <nav className="bottomNav">
-        <Nav active={tab==="home"} onClick={()=>setTab("home")} icon="⌂" label="Home"/>
-        <Nav active={tab==="capture"} onClick={()=>setTab("capture")} icon="＋" label="Capture"/>
-        <Nav active={tab==="transactions"} onClick={()=>setTab("transactions")} icon="▤" label="Money"/>
-        <Nav active={tab==="zimbabwe"} onClick={()=>setTab("zimbabwe")} icon="🇿🇼" label="Zimbabwe"/>
-        <Nav active={tab==="assistant"} onClick={()=>setTab("assistant")} icon="✦" label="Ask Jude"/>
-      </nav>
-    </div>
-  );
-}
-
-function Nav({active,onClick,icon,label}:{active:boolean,onClick:()=>void,icon:string,label:string}) {
-  return <button className={active?"navItem active":"navItem"} onClick={onClick}><span>{icon}</span><small>{label}</small></button>
-}
-
-function AuthScreen({supabase,mode,setMode}:{supabase:any,mode:"signin"|"signup",setMode:(m:"signin"|"signup")=>void}) {
-  const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [name,setName]=useState(""); const [msg,setMsg]=useState("");
-  async function submit(e:any) {
-    e.preventDefault(); setMsg("Working…");
-    if(mode==="signup") {
-      const {error}=await supabase.auth.signUp({email,password,options:{data:{first_name:name}}});
-      setMsg(error?.message || "Check your email to confirm your account.");
-    } else {
-      const {error}=await supabase.auth.signInWithPassword({email,password});
-      setMsg(error?.message || "");
-    }
-  }
-  return <div className="auth">
-    <div className="logoMark">HJ</div>
-    <h1>Hey Jude</h1><p className="tagline">One household. One financial truth.</p>
-    <form className="card form" onSubmit={submit}>
-      {mode==="signup" && <input placeholder="Your name" value={name} onChange={e=>setName(e.target.value)} required/>}
-      <input type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/>
-      <input type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required/>
-      <button className="primary" type="submit">{mode==="signin"?"Sign in":"Create account"}</button>
-      {msg && <p className="small">{msg}</p>}
-      <button type="button" className="linkBtn" onClick={()=>setMode(mode==="signin"?"signup":"signin")}>
-        {mode==="signin"?"Create an account":"Already have an account? Sign in"}
-      </button>
-    </form>
-  </div>
-}
-
-function SetupScreen({onCreate,onJoin,message}:{onCreate:(n:string)=>void,onJoin:(c:string)=>void,message:string}) {
-  const [name,setName]=useState("Cunningham & Lynne"); const [code,setCode]=useState("");
-  return <div className="auth">
-    <div className="logoMark">HJ</div><h1>Set up your household</h1><p className="tagline">Create it once, then connect the second phone.</p>
-    <div className="card form">
-      <h3>Create household</h3><input value={name} onChange={e=>setName(e.target.value)} />
-      <button className="primary" onClick={()=>onCreate(name)}>Create household</button>
-      <div className="divider">OR</div>
-      <h3>Join existing household</h3><input placeholder="8-character join code" value={code} onChange={e=>setCode(e.target.value)} />
-      <button className="secondary" onClick={()=>onJoin(code)}>Join household</button>
-      {message && <p className="small">{message}</p>}
-    </div>
-  </div>
-}
-
-function Dashboard({txs,people,household}:{txs:Tx[],people:Person[],household:Household}) {
-  const {start,end}=monthRange();
-  const current=txs.filter(t=>t.transaction_date>=start && t.transaction_date<=end);
-  const income=current.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
-  const spending=current.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
-  const project=current.filter(t=>t.project==="Zimbabwe").reduce((s,t)=>s+t.amount,0);
-  const byPerson=people.map(p=>({name:p.name,income:current.filter(t=>t.paid_by===p.id&&t.type==="income").reduce((s,t)=>s+t.amount,0),paid:current.filter(t=>t.paid_by===p.id&&t.type==="expense").reduce((s,t)=>s+t.amount,0)}));
-  return <div>
-    <div className="hero"><div><span className="eyebrow">FINANCIAL MONTH</span><h2>{start.slice(5).replace("-","/")} → {end.slice(5).replace("-","/")}</h2><p>Household money, without guesswork.</p></div><div className="heroIcon">HJ</div></div>
-    <div className="stats">
-      <Stat label="Income" value={money(income)} tone="good"/><Stat label="Spent" value={money(spending)} tone="warn"/><Stat label="Remaining" value={money(income-spending)} tone="neutral"/>
-    </div>
-    <section className="section"><div className="sectionHead"><h3>Contributions</h3><span>this month</span></div>
-      <div className="card">
-        {byPerson.map(p=><div className="personRow" key={p.name}><div><b>{p.name}</b><small>Income {money(p.income)} · Paid {money(p.paid)}</small></div><strong>{money(p.income-p.paid)}</strong></div>)}
-        {!byPerson.length && <p className="empty">Add household members to see the split.</p>}
-      </div>
-    </section>
-    <section className="section"><div className="sectionHead"><h3>Zimbabwe project</h3><span>all tagged spending</span></div>
-      <div className="projectCard"><div><b>{money(project)}</b><small>Spent this month</small></div><div className="progress"><i style={{width:`${Math.min(project/20000*100,100)}%`}}/></div></div>
-    </section>
-    <section className="section"><div className="sectionHead"><h3>Recent activity</h3></div>
-      <div className="card">{txs.slice(0,5).map(t=><TxRow key={t.id} t={t}/>)}</div>
-    </section>
-  </div>
-}
-
-function Stat({label,value,tone}:{label:string,value:string,tone:string}) { return <div className={`stat ${tone}`}><small>{label}</small><b>{value}</b></div> }
-function TxRow({ t }: { t: any }) {
-  return (
-    <div className="tx flex items-center justify-between p-3 border-b border-slate-100 dark:border-slate-800">
-      <div className="flex items-center gap-3">
-        <div>
-          <div className="font-medium text-slate-900 dark:text-white">{t.description || t.category}</div>
-          <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-            <span>{t.transaction_date}</span>
-            {t.project && (
-              <span className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded text-[10px] font-semibold">
-                {t.project}
-              </span>
-            )}
-            {t.profiles?.full_name && (
-              <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-medium text-slate-600 dark:text-slate-300">
-                {t.profiles.full_name}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className={`font-semibold ${t.type === "income" ? "text-emerald-600" : "text-slate-900 dark:text-white"}`}>
-        {t.type === "income" ? "+" : "-"}{money(t.amount)}
-      </div>
-    </div>
-  );
-}
-
-
-  function Capture({ people, projects = [], onSave }: { people: Person[], projects: any[], onSave: (x: Partial<Tx>) => void }) {
-  const [form, setForm] = useState<any>({ type: "expense", amount: "", category: "Groceries", description: "", project: "" });
-  const [preview, setPreview] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  async function scan(f: File) {
-    setFile(f); setPreview(URL.createObjectURL(f)); setBusy(true);
-    const fd = new FormData(); fd.append("receipt", f);
-    try {
-      const r = await fetch("/api/receipt", {method: "POST", body: fd}); const data = await r.json();
-      if (data.receipt) setForm((x: any) => ({...x, ...data.receipt, amount: data.receipt.amount ?? ""}));
-      else if (data.error) alert(data.error);
-    } catch { alert("Receipt scan failed. You can enter it manually."); }
-    setBusy(false);
-  }
-
-  return (
-    <div className="card p-4 space-y-4 bg-white dark:bg-slate-900 rounded-xl shadow-sm">
-      <h3 className="font-semibold text-lg text-slate-900 dark:text-white">Log Transaction</h3>
-      
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-xs font-medium text-slate-500">Type</label>
-          <select 
-            className="w-full mt-1 p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
-            value={form.type} 
-            onChange={e => setForm({...form, type: e.target.value})}
-          >
-            <option value="expense">Expense (-)</option>
-            <option value="income">Income (+)</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-slate-500">Project Link</label>
-          <select 
-            className="w-full mt-1 p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
-            value={form.project} 
-            onChange={e => setForm({...form, project: e.target.value})}
-          >
-            <option value="">None (Household)</option>
-            {projects.map(p => (
-              <option key={p.id} value={p.name}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-slate-500">Amount</label>
-        <input 
-          type="number" 
-          placeholder="0.00" 
-          className="w-full mt-1 p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
-          value={form.amount} 
-          onChange={e => setForm({...form, amount: e.target.value})} 
-        />
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-slate-500">Category</label>
-        <select 
-          className="w-full mt-1 p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
-          value={form.category} 
-          onChange={e => setForm({...form, category: e.target.value})}
-        >
-          <option value="Groceries">Groceries</option>
-          <option value="Utilities">Utilities</option>
-          <option value="Transport">Transport</option>
-          <option value="Farming & Operations">Farming & Operations</option>
-          <option value="Other">Other</option>
-        </select>
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-slate-500">Description (Optional)</label>
-        <input 
-          type="text" 
-          placeholder="e.g. Solar inverter & batteries" 
-          className="w-full mt-1 p-2 border rounded-lg dark:bg-slate-800 dark:border-slate-700"
-          value={form.description} 
-          onChange={e => setForm({...form, description: e.target.value})} 
-        />
-      </div>
-
-      <button 
-        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition"
-        onClick={() => onSave(form)}
-      >
-        Add Transaction
-      </button>
-    </div>
-  );
-}
- function speak() {
+function speak() {
   // audio or speech helper placeholder
+}
+
+function Home({ supabase, householdId }: { supabase: any; householdId: string }) {
+  return (
+    <div className="p-6 pb-24 max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Home Dashboard</h2>
+      <p className="text-gray-600">Welcome to your operational overview.</p>
+    </div>
+  );
+}
+
+function Capture({ supabase, householdId }: { supabase: any; householdId: string }) {
+  return (
+    <div className="p-6 pb-24 max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Capture</h2>
+      <p className="text-gray-600">Quick entry form will appear here.</p>
+    </div>
+  );
+}
+
+function Transactions({ supabase, householdId }: { supabase: any; householdId: string }) {
+  return (
+    <div className="p-6 pb-24 max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Transactions</h2>
+      <p className="text-gray-600">Financial records will appear here.</p>
+    </div>
+  );
 }
 
 function Zimbabwe({ txs, onSave }: { txs: any[]; onSave: (x: any) => void }) {
@@ -354,4 +49,68 @@ function Assistant({ supabase, householdId }: { supabase: any; householdId: stri
       <p className="text-gray-600">Your AI assistant interface will appear here.</p>
     </div>
   );
-} 
+}
+
+export default function AppShell({ supabase, householdId }: { supabase: any; householdId: string }) {
+  const [activeTab, setActiveTab] = useState('home');
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Hey Jude</h1>
+          <p className="text-xs text-gray-500">Cunningham &amp; Lynne</p>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main>
+        {activeTab === 'home' && <Home supabase={supabase} householdId={householdId} />}
+        {activeTab === 'capture' && <Capture supabase={supabase} householdId={householdId} />}
+        {activeTab === 'transactions' && <Transactions supabase={supabase} householdId={householdId} />}
+        {activeTab === 'zimbabwe' && <Zimbabwe txs={[]} onSave={() => {}} />}
+        {activeTab === 'assistant' && <Assistant supabase={supabase} householdId={householdId} />}
+      </main>
+
+      {/* Bottom Navigation Bar */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around py-3 shadow-lg z-50">
+        <button
+          onClick={() => setActiveTab('home')}
+          className={`flex flex-col items-center text-xs font-medium ${activeTab === 'home' ? 'text-indigo-600' : 'text-gray-500'}`}
+        >
+          <span>🏠</span>
+          <span>Home</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('capture')}
+          className={`flex flex-col items-center text-xs font-medium ${activeTab === 'capture' ? 'text-indigo-600' : 'text-gray-500'}`}
+        >
+          <span>➕</span>
+          <span>Capture</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('transactions')}
+          className={`flex flex-col items-center text-xs font-medium ${activeTab === 'transactions' ? 'text-indigo-600' : 'text-gray-500'}`}
+        >
+          <span>💳</span>
+          <span>Money</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('zimbabwe')}
+          className={`flex flex-col items-center text-xs font-medium ${activeTab === 'zimbabwe' ? 'text-indigo-600' : 'text-gray-500'}`}
+        >
+          <span>ZW</span>
+          <span>Zimbabwe</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('assistant')}
+          className={`flex flex-col items-center text-xs font-medium ${activeTab === 'assistant' ? 'text-indigo-600' : 'text-gray-500'}`}
+        >
+          <span>✨</span>
+          <span>Ask Jude</span>
+        </button>
+      </nav>
+    </div>
+  );
+}
