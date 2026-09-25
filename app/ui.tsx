@@ -2,11 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "../lib/supabase/client";
-import Home from "./Home";
-import Capture from "./Capture";
-import Transactions from "./Transactions";
-import Zimbabwe from "./Zimbabwe";
-import Assistant from "./Assistant";
+
 type Tab = "home" | "capture" | "transactions" | "zimbabwe" | "assistant";
 type Person = { id: string; name: string };
 type Tx = {
