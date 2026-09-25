@@ -3,10 +3,16 @@
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase directly inside the file so it's always ready
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Safe lazy initialization so it never crashes the Vercel build
+let supabaseInstance: any = null;
+function getSupabase() {
+  if (!supabaseInstance) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+  }
+  return supabaseInstance;
+}
 
 export default function AppShell() {
   const [activeTab, setActiveTab] = useState('capture');
@@ -118,6 +124,7 @@ function Capture() {
         target_date: captureType === 'milestone' ? milestoneDate : null,
       };
 
+      const supabase = getSupabase();
       const { error } = await supabase.from('transactions').insert([payload]);
 
       if (error) throw error;
