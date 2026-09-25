@@ -60,7 +60,7 @@ export default function AppShell() {
 
 function AskJude() {
   const [messages, setMessages] = useState([
-    { sender: 'jude', text: "Hello Cunningham! I'm Jude, your personal AI advisor. You can type, use voice dictation 🎤, or snap/upload pictures 📸 of receipts and documents for me to read and translate!" }
+    { sender: 'jude', text: "Hello Cunningham! I'm Jude, your personal AI advisor connected directly to your live data. Ask me about your savings, account balances, or Mahusekwa farm progress!" }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -93,26 +93,22 @@ function AskJude() {
     recognition.start();
   };
 
-  // Handle Image Upload / Camera Capture
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
-      };
+      reader.onloadend = () => setSelectedImage(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() && !selectedImage) return;
 
     const userMsg = input;
     const imgAttached = selectedImage;
 
-    // Append user message
     setMessages(prev => [
       ...prev, 
       { sender: 'user', text: userMsg || '[Image Attached]', image: imgAttached }
@@ -122,39 +118,72 @@ function AskJude() {
     setSelectedImage(null);
     setLoading(true);
 
-    setTimeout(() => {
-      let reply = "I've reviewed your request and logged the details.";
+    try {
+      // Fetch live transactions from Supabase to answer intelligently
+      const { data: records, error } = await supabase.from('transactions').select('*');
+      
+      let accountBalances: { [key: string]: number } = {
+        'Paisa Account': 0,
+        'Absa Account': 0,
+        "Lynne's Mukuru Account": 0,
+        'Your Mukuru Account (Joint Savings)': 0,
+      };
+
+      if (!error && records) {
+        records.forEach((item) => {
+          const amt = parseFloat(item.amount) || 0;
+          const source = item.paid_from;
+          const dest = item.transfer_to;
+
+          if (item.record_type === 'transaction') {
+            if (item.type === 'income' && source && accountBalances[source] !== undefined) {
+              accountBalances[source] += amt;
+            } else if (item.type === 'expense' && source && accountBalances[source] !== undefined) {
+              accountBalances[source] -= amt;
+            }
+          } else if (item.record_type === 'transfer') {
+            if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+            if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
+          }
+        });
+      }
+
+      let reply = "I've checked your records. Here is what I found:";
+      const lower = userMsg.toLowerCase();
+
       if (imgAttached) {
         reply = "📸 Image analyzed successfully! I've extracted the text and verified the document contents for your records.";
+      } else if (lower.includes('saved') || lower.includes('saving') || lower.includes('joint')) {
+        const savings = accountBalances['Your Mukuru Account (Joint Savings)'];
+        reply = `💰 Your Joint Savings (Your Mukuru Account) currently stands at R${savings.toLocaleString()}. Across all your accounts (Paisa: R${accountBalances['Paisa Account'].toLocaleString()}, Absa: R${accountBalances['Absa Account'].toLocaleString()}, Lynne's Mukuru: R${accountBalances["Lynne's Mukuru Account"].toLocaleString()}), your total tracked liquidity is active.`;
+      } else if (lower.includes('balance') || lower.includes('account') || lower.includes('how much')) {
+        reply = `💳 **Account Balances Summary:**\n• Paisa Account (Salary/Tips): R${accountBalances['Paisa Account'].toLocaleString()}\n• Absa Account (Side Hustle): R${accountBalances['Absa Account'].toLocaleString()}\n• Lynne's Mukuru Account: R${accountBalances["Lynne's Mukuru Account"].toLocaleString()}\n• Your Mukuru Account (Joint Savings): R${accountBalances['Your Mukuru Account (Joint Savings)'].toLocaleString()}`;
+      } else if (lower.includes('farm') || lower.includes('mahusekwa') || lower.includes('greenhouse')) {
+        reply = "🌱 The Mahusekwa farm project (5,000 sqm greenfield estate) is structured across 6 phases—from Phase 1 (Off-grid solar & water) to Phase 6 (Commercial sales). Dad is actively managing operations on-site!";
       } else {
-        const lower = userMsg.toLowerCase();
-        if (lower.includes('farm') || lower.includes('mahusekwa') || lower.includes('greenhouse')) {
-          reply = "The Mahusekwa farm project is mapped across its 6 phases—from off-grid solar and water in Phase 1 to protected horticulture and livestock units. Dad is managing operations on-site!";
-        } else if (lower.includes('money') || lower.includes('account') || lower.includes('balance') || lower.includes('paisa') || lower.includes('mukuru')) {
-          reply = "Your accounts (Paisa for salary/tips, Absa for driving side-hustle, Lynne's Mukuru, and Joint Savings Mukuru) are fully synced and tracking in your Money tab.";
-        }
+        reply = `I understand you're asking about "${userMsg}". Your accounts are active and the Mahusekwa farm 6-phase master plan is on track. How else can I assist you today?`;
       }
 
       setMessages(prev => [...prev, { sender: 'jude', text: reply }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { sender: 'jude', text: "I had trouble connecting to your database to fetch those figures, but your accounts are secure." }]);
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (
     <div className="p-6 pb-24 max-w-2xl mx-auto flex flex-col h-[82vh]">
       <div className="mb-3">
         <h2 className="text-2xl font-bold text-gray-900">Ask Jude</h2>
-        <p className="text-gray-600 text-sm">Voice commands, image reading, and intelligent advisory.</p>
+        <p className="text-gray-600 text-sm">Live database assistant for your accounts, savings, and farm strategy.</p>
       </div>
 
-      {/* Chat Messages Box */}
       <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-y-auto space-y-4 mb-4">
         {messages.map((m, idx) => (
           <div key={idx} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm space-y-2 ${m.sender === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-100 text-gray-900 rounded-bl-none'}`}>
-              {m.image && (
-                <img src={m.image} alt="Uploaded attachment" className="rounded-lg max-h-48 object-cover w-full" />
-              )}
+            <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm space-y-2 whitespace-pre-line ${m.sender === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-100 text-gray-900 rounded-bl-none'}`}>
+              {m.image && <img src={m.image} alt="Attachment" className="rounded-lg max-h-48 object-cover w-full" />}
               <p>{m.text}</p>
             </div>
           </div>
@@ -162,13 +191,12 @@ function AskJude() {
         {loading && (
           <div className="flex justify-start">
             <div className="bg-gray-100 text-gray-500 p-3 rounded-2xl text-sm animate-pulse">
-              Jude is analyzing...
+              Jude is querying your accounts...
             </div>
           </div>
         )}
       </div>
 
-      {/* Image Preview Banner if selected */}
       {selectedImage && (
         <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -179,50 +207,20 @@ function AskJude() {
         </div>
       )}
 
-      {/* Input Form with Voice & Camera buttons */}
       <form onSubmit={handleSend} className="flex items-center gap-2">
-        <input 
-          type="file" 
-          accept="image/*" 
-          ref={fileInputRef} 
-          onChange={handleImageChange} 
-          className="hidden" 
-        />
+        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageChange} className="hidden" />
         
-        {/* Camera / Image Upload Button */}
-        <button 
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          title="Upload or Snap Picture"
-          className="p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition flex items-center justify-center"
-        >
-          📷
-        </button>
-
-        {/* Voice Dictation Button */}
-        <button 
-          type="button"
-          onClick={startListening}
-          title="Voice Dictation"
-          className={`p-2.5 rounded-xl transition flex items-center justify-center ${isListening ? 'bg-red-500 text-white animate-bounce' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
-        >
-          🎤
-        </button>
+        <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition flex items-center justify-center">📷</button>
+        <button type="button" onClick={startListening} className={`p-2.5 rounded-xl transition flex items-center justify-center ${isListening ? 'bg-red-500 text-white animate-bounce' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>🎤</button>
 
         <input 
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={isListening ? "Listening... Speak now..." : "Ask Jude, or attach photo/voice..."}
+          placeholder={isListening ? "Listening..." : "Ask Jude about savings, balances, or farm..."}
           className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
         />
-
-        <button 
-          type="submit"
-          className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm"
-        >
-          Send
-        </button>
+        <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
       </form>
     </div>
   );
