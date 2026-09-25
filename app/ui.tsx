@@ -102,7 +102,7 @@ function MoneyDashboard() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Money Dashboard</h2>
-          <p className="text-gray-600 text-sm">Account balances and financial overview.</p>
+          <p className="text-gray-600 text-sm">Financial Period: <strong className="text-blue-600">25 Sep 2026 – 25 Oct 2026</strong></p>
         </div>
         <button onClick={fetchRecords} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">Refresh</button>
       </div>
@@ -137,7 +137,7 @@ function MoneyDashboard() {
           <h3 className="font-bold text-gray-900">Recurring Monthly Overheads (Rent, WiFi, Cartrack)</h3>
         </div>
         {recurringExpenses.length === 0 ? (
-          <div className="p-6 text-center text-gray-500 text-sm">No recurring expenses logged yet. Use the Capture tab to add Hout Bay rent, WiFi, or vehicle tracking!</div>
+          <div className="p-6 text-center text-gray-500 text-sm">No recurring expenses logged for this cycle yet. Use the Capture tab to add them!</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {recurringExpenses.map((item) => (
@@ -150,9 +150,7 @@ function MoneyDashboard() {
                   <p className="text-sm font-medium text-gray-900 mt-1">{item.description}</p>
                 </div>
                 <div className="text-right">
-                  <span className="text-sm font-bold text-red-600">
-                    {item.currency === 'USD' ? '$' : item.currency === 'EUR' ? '€' : 'R'}{parseFloat(item.amount || 0).toLocaleString()} / mo
-                  </span>
+                  <span className="text-sm font-bold text-red-600">R{parseFloat(item.amount || 0).toLocaleString()} / mo</span>
                 </div>
               </div>
             ))}
@@ -163,12 +161,12 @@ function MoneyDashboard() {
       {/* Recent Activity Feed */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="font-bold text-gray-900">Recent Activity & Logs</h3>
+          <h3 className="font-bold text-gray-900">Current Cycle Activity & Logs</h3>
         </div>
         {loading ? (
           <div className="p-8 text-center text-gray-500 text-sm">Loading records...</div>
         ) : records.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">No records found.</div>
+          <div className="p-8 text-center text-gray-500 text-sm">No records logged for this cycle yet. Head over to Capture to start recording!</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {records.map((item) => (
@@ -210,7 +208,6 @@ function Capture() {
   const [amount, setAmount] = useState('');
   const [paidFrom, setPaidFrom] = useState('Paisa Account');
 
-  // Recurring specific state
   const [recDesc, setRecDesc] = useState('');
   const [recAmount, setRecAmount] = useState('');
   const [recAccount, setRecAccount] = useState('Paisa Account');
@@ -334,7 +331,7 @@ function Capture() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Groceries at SuperSpar" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Salary, Groceries" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
@@ -549,7 +546,7 @@ function ZimbabweDashboard() {
 
 function AskJude() {
   const [messages, setMessages] = useState([
-    { sender: 'jude', text: "Hello Cunningham! I'm Jude, your personal AI advisor. Ask me about your savings, account balances, recurring overheads, or farm progress!" }
+    { sender: 'jude', text: "Hello Cunningham! Your financial month cycle (25 Sep to 25 Oct) is freshly underway and all test records have been cleared. What would you like to log first?" }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -616,8 +613,6 @@ function AskJude() {
         'Your Mukuru Account (Joint Savings)': 0,
       };
 
-      let recurringCount = 0;
-
       if (!error && records) {
         records.forEach((item) => {
           const amt = parseFloat(item.amount) || 0;
@@ -631,31 +626,25 @@ function AskJude() {
             if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
             if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
           } else if (item.record_type === 'recurring') {
-            recurringCount++;
             if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
           }
         });
       }
 
-      let reply = "I've checked your records.";
+      let reply = "I'm ready for your actual records for this cycle!";
       const lower = userMsg.toLowerCase();
 
       if (imgAttached) {
-        reply = "📸 Image analyzed successfully! I've extracted the text and verified the document contents.";
-      } else if (lower.includes('recurring') || lower.includes('rent') || lower.includes('wifi') || lower.includes('track')) {
-        reply = `📋 You currently have ${recurringCount} recurring monthly overhead(s) logged (such as Hout Bay rent, Cartrack, and fiber WiFi), which automatically deduct from your selected accounts upon logging.`;
-      } else if (lower.includes('saved') || lower.includes('saving') || lower.includes('joint')) {
-        const savings = accountBalances['Your Mukuru Account (Joint Savings)'];
-        reply = `💰 Your Joint Savings (Your Mukuru Account) stands at R${savings.toLocaleString()}.`;
+        reply = "📸 Image analyzed successfully! Ready to log these details into your fresh cycle.";
       } else if (lower.includes('balance') || lower.includes('account')) {
-        reply = `💳 **Account Balances:**\n• Paisa: R${accountBalances['Paisa Account'].toLocaleString()}\n• Absa: R${accountBalances['Absa Account'].toLocaleString()}\n• Lynne's Mukuru: R${accountBalances["Lynne's Mukuru Account"].toLocaleString()}\n• Your Mukuru: R${accountBalances['Your Mukuru Account (Joint Savings)'].toLocaleString()}`;
+        reply = `💳 **Current Balances (25 Sep Cycle):**\n• Paisa: R${accountBalances['Paisa Account'].toLocaleString()}\n• Absa: R${accountBalances['Absa Account'].toLocaleString()}\n• Lynne's Mukuru: R${accountBalances["Lynne's Mukuru Account"].toLocaleString()}\n• Your Mukuru: R${accountBalances['Your Mukuru Account (Joint Savings)'].toLocaleString()}`;
       } else {
-        reply = `I'm tracking your accounts, transfers, and recurring overheads. How else can I assist?`;
+        reply = `Your accounts are clean and ready for your live transactions starting today, September 25th. How can I help?`;
       }
 
       setMessages(prev => [...prev, { sender: 'jude', text: reply }]);
     } catch (err) {
-      setMessages(prev => [...prev, { sender: 'jude', text: "I had trouble checking your database records, but your accounts are secure." }]);
+      setMessages(prev => [...prev, { sender: 'jude', text: "Ready for your new cycle entries!" }]);
     } finally {
       setLoading(false);
     }
@@ -665,7 +654,7 @@ function AskJude() {
     <div className="p-6 pb-24 max-w-2xl mx-auto flex flex-col h-[82vh]">
       <div className="mb-3">
         <h2 className="text-2xl font-bold text-gray-900">Ask Jude</h2>
-        <p className="text-gray-600 text-sm">Assistant for accounts, recurring overheads, and farm strategy.</p>
+        <p className="text-gray-600 text-sm">Financial Period: 25 Sep 2026 – 25 Oct 2026</p>
       </div>
 
       <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-y-auto space-y-4 mb-4">
@@ -700,7 +689,7 @@ function AskJude() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={isListening ? "Listening..." : "Ask Jude about rent, wifi, rent, or balances..."}
+          placeholder={isListening ? "Listening..." : "Ask Jude..."}
           className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
         />
         <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
