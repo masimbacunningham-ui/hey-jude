@@ -419,3 +419,11 @@ export default AppShell;function Transactions({ supabase, householdId }: { supab
   );
 }
 
+function Assistant({ supabase, householdId }: { supabase: any; householdId: string }) {
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Ask Jude</h2>
+      <p className="text-gray-600">Your AI assistant interface will appear here.</p>
+    </div>
+  );
+}
