@@ -396,4 +396,11 @@ function Assistant({txs,household}:{txs:Tx[],household:Household}) {
   return <div><div className="pageTitle"><h2>Ask Jude</h2><p>Ask questions about the household record.</p></div><div className="suggestions">{suggestions.map(s=><button key={s} onClick={()=>setQ(s)}>{s}</button>)}</div><div className="card chat"><textarea placeholder="Ask anything about the recorded finances…" value={q} onChange={e=>setQ(e.target.value)}/><button className="primary" onClick={ask} disabled={busy||!q.trim()}>{busy?"Thinking…":"Ask Hey Jude"}</button>{answer&&<div className="answer"><b>Hey Jude</b><p>{answer}</p></div>}</div></div>
 }
   }
-export default AppShell;
+export default AppShell;function Transactions({ supabase, householdId }: { supabase: any; householdId: string }) {
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Transactions</h2>
+      <p className="text-gray-600">Your transaction ledger will appear here.</p>
+    </div>
+  );
+}
