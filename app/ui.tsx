@@ -410,4 +410,29 @@ export default AppShell;function Transactions({ supabase, householdId }: { supab
       <p className="text-gray-600">Mahusekwa farm estate and project updates will appear here.</p>
     </div>
   );
+}function Home({ supabase, householdId }: { supabase: any; householdId: string }) {
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Home Dashboard</h2>
+      <p className="text-gray-600">Welcome to your operational overview.</p>
+    </div>
+  );
+}
+
+function Capture({ supabase, householdId }: { supabase: any; householdId: string }) {
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Capture</h2>
+      <p className="text-gray-600">Quick entry form will appear here.</p>
+    </div>
+  );
+}
+
+function Assistant({ supabase, householdId }: { supabase: any; householdId: string }) {
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Ask Jude</h2>
+      <p className="text-gray-600">Your AI assistant interface will appear here.</p>
+    </div>
+  );
 }
