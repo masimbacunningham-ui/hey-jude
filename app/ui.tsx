@@ -334,77 +334,11 @@ function TxRow({ t }: { t: any }) {
     </div>
   );
 }
-  function speak() {
-    const SR=(window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if(!SR) return alert("Voice entry is not supported by this browser. Use Safari/Chrome on a supported iPhone.");
-    const recognition=new SR(); recognition.lang="en-ZA"; recognition.interimResults=false; recognition.maxAlternatives=1;
-    recognition.onstart=()=>setListening(true);
-    recognition.onend=()=>setListening(false);
-    recognition.onerror=()=>setListening(false);
-    recognition.onresult=(event:any)=>{
-      const text=event.results[0][0].transcript;
-      const amountMatch=text.replace(/,/g,"").match(/(?:r|rand|zar)?\s*(\d+(?:\.\d{1,2})?)/i);
-      const amount=amountMatch ? Number(amountMatch[1]) : "";
-      setForm((x:any)=>({...x, amount:x.amount||amount, description:x.description||text}));
-    };
-    recognition.start();
-  
-  return <div>
-    <div className="pageTitle"><h2>Capture money</h2><p>Receipt first. Voice or manual entry when there is no receipt.</p></div>
-    <div className="captureGrid">
-      <button className="captureTile" onClick={()=>input.current?.click()}><span>📷</span><b>Scan receipt</b><small>AI extracts the details</small></button>
-      <button className="captureTile" onClick={speak}><span>{listening?"🔴":"🎙️"}</span><b>{listening?"Listening…":"Speak it"}</b><small>“Paid R450 for fuel”</small></button>
-    </div>
-    <input ref={input} hidden type="file" accept="image/*" capture="environment" onChange={e=>e.target.files?.[0]&&scan(e.target.files[0])}/>
-    {preview && <img className="receiptPreview" src={preview} alt="Receipt preview"/>}
-    <div className="card form">
-      {busy && <div className="aiLine"><span className="pulse"/> AI is reading the receipt…</div>}
-      <select value={form.type} onChange={e=>setForm({...form,type:e.target.value})}><option value="expense">Expense</option><option value="income">Income</option></select>
-      <input inputMode="decimal" placeholder="Amount" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}/>
-      <input placeholder="Description / merchant" value={form.description||""} onChange={e=>setForm({...form,description:e.target.value})}/>
-      <input placeholder="Category" value={form.category||""} onChange={e=>setForm({...form,category:e.target.value})}/>
-      <select value={form.project||""} onChange={e=>setForm({...form,project:e.target.value})}><option value="">Household</option><option value="Zimbabwe">🇿🇼 Zimbabwe project</option></select>
-      <input placeholder="Account / cash / wallet" value={form.account_name||""} onChange={e=>setForm({...form,account_name:e.target.value})}/>
-      <button className="primary" disabled={!form.amount} onClick={()=>onSave({...form,receiptFile:file})}>Save transaction</button>
-    </div>
-  </div>
-  
-function Transactions({txs}:{txs:Tx[],people:Person[]}) {
-  const [q,setQ]=useState("");
-  const filtered=txs.filter(t=>`${t.description} ${t.category} ${t.account_name||""} ${t.project||""}`.toLowerCase().includes(q.toLowerCase()));
-  return <div><div className="pageTitle"><h2>Money</h2><p>Every transaction in one shared record.</p></div><input className="search" placeholder="Search transactions…" value={q} onChange={e=>setQ(e.target.value)}/><div className="card">{filtered.map(t=><TxRow key={t.id} t={t}/>)}</div></div>
+ function speak() {
+  // audio or speech helper placeholder
 }
 
-function Zimbabwe({txs,onSave}:{txs:Tx[],onSave:(x:Partial<Tx>)=>void}) {
-  const [amount,setAmount]=useState(""); const [desc,setDesc]=useState(""); const [cat,setCat]=useState("House");
-function Home({ supabase, householdId }: { supabase: any; householdId: string }) {
-  return (
-    <div className="p-6 pb-24 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-gray-800">Home Dashboard</h2>
-      <p className="text-gray-600">Welcome to your operational overview.</p>
-    </div>
-  );
-}
-
-function Capture({ supabase, householdId }: { supabase: any; householdId: string }) {
-  return (
-    <div className="p-6 pb-24 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-gray-800">Capture</h2>
-      <p className="text-gray-600">Quick entry form will appear here.</p>
-    </div>
-  );
-}
-
-function Transactions({ supabase, householdId }: { supabase: any; householdId: string }) {
-  return (
-    <div className="p-6 pb-24 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4 text-gray-800">Transactions</h2>
-      <p className="text-gray-600">Financial records will appear here.</p>
-    </div>
-  );
-}
-
-function Zimbabwe({ supabase, householdId }: { supabase: any; householdId: string }) {
+function Zimbabwe({ txs, onSave }: { txs: any[]; onSave: (x: any) => void }) {
   return (
     <div className="p-6 pb-24 max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold mb-4 text-gray-800">Zimbabwe Project</h2>
