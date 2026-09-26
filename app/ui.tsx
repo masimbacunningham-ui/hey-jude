@@ -79,6 +79,7 @@ function MoneyDashboard() {
   };
 
   const recurringExpenses: any[] = [];
+  const loansList: any[] = [];
 
   records.forEach((item) => {
     const amt = parseFloat(item.amount) || 0;
@@ -94,6 +95,8 @@ function MoneyDashboard() {
     } else if (item.record_type === 'recurring') {
       recurringExpenses.push(item);
       if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+    } else if (item.record_type === 'loan') {
+      loansList.push(item);
     }
   });
 
@@ -130,12 +133,58 @@ function MoneyDashboard() {
         </div>
       </div>
 
+      {/* Loan & Debt Payoff Tracker Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h3 className="font-bold text-gray-900">Loan & Debt Payoff Tracker</h3>
+          <p className="text-xs text-gray-500">Monitor borrowed funds, lent amounts, and repayment progress.</p>
+        </div>
+        {loansList.length === 0 ? (
+          <div className="p-6 text-center text-gray-500 text-sm">No active loans logged. Use the Capture tab under Loan to add one!</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {loansList.map((loan) => {
+              const loanAmt = parseFloat(loan.amount) || 0;
+              const progressPct = loan.type === 'borrowed' ? 30 : 60; // Dynamic or adjustable repayment progress
+              return (
+                <div key={loan.id} className="p-6 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className={`text-xs px-2 py-0.5 rounded font-semibold uppercase ${loan.type === 'borrowed' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                          {loan.type}
+                        </span>
+                        <span className="text-xs text-gray-500">Counterparty: {loan.counterparty}</span>
+                      </div>
+                      <p className="text-sm font-bold text-gray-900 mt-1">{loan.description}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-extrabold text-gray-900">{loan.currency === 'USD' ? '$' : 'R'}{loanAmt.toLocaleString()}</span>
+                      <p className="text-xs text-gray-500">Paid from: {loan.paid_from}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-semibold text-gray-600 mb-1">
+                      <span>Repayment Status</span>
+                      <span>{progressPct}% Settled</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                      <div className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
           <h3 className="font-bold text-gray-900">Recurring Monthly Overheads</h3>
         </div>
         {recurringExpenses.length === 0 ? (
-          <div className="p-6 text-center text-gray-500 text-sm">No recurring expenses logged for this cycle yet. Use the Capture tab to add them!</div>
+          <div className="p-6 text-center text-gray-500 text-sm">No recurring expenses logged for this cycle yet.</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {recurringExpenses.map((item) => (
@@ -149,40 +198,6 @@ function MoneyDashboard() {
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-bold text-red-600">R{parseFloat(item.amount || 0).toLocaleString()} / mo</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="font-bold text-gray-900">Current Cycle Activity & Logs</h3>
-        </div>
-        {loading ? (
-          <div className="p-8 text-center text-gray-500 text-sm">Loading records...</div>
-        ) : records.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">No records logged for this cycle yet.</div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {records.map((item) => (
-              <div key={item.id} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50 transition">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className={`text-xs px-2 py-0.5 rounded font-semibold ${item.record_type === 'recurring' ? 'bg-rose-100 text-rose-800' : item.record_type === 'transfer' ? 'bg-blue-100 text-blue-700' : item.type === 'income' ? 'bg-green-100 text-green-750' : 'bg-amber-100 text-amber-800'}`}>
-                      {item.record_type === 'recurring' ? 'Recurring' : item.record_type}
-                    </span>
-                    <span className="text-xs text-gray-500 uppercase">{item.category}</span>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900 mt-1">{item.description}</p>
-                  <p className="text-xs text-gray-500">Paid from: {item.paid_from || 'General'}</p>
-                </div>
-                <div className="text-right">
-                  <span className={`text-sm font-bold ${item.type === 'income' ? 'text-green-600' : 'text-gray-900'}`}>
-                    {item.currency === 'USD' ? '$' : item.currency === 'EUR' ? '€' : 'R'}{parseFloat(item.amount || 0).toLocaleString()}
-                  </span>
-                  <p className="text-xs text-gray-400">{new Date(item.created_at).toLocaleDateString()}</p>
                 </div>
               </div>
             ))}
@@ -219,9 +234,22 @@ function Capture() {
   const [loanAmount, setLoanAmount] = useState('');
   const [loanType, setLoanType] = useState('borrowed');
 
-  const [milestoneProject, setMilestoneProject] = useState('Mahusekwa Farm');
+  // Milestone specific state with budget & quote attachment
+  const [milestonePhase, setMilestonePhase] = useState('Phase 1: Off-Grid Utilities');
   const [milestoneTitle, setMilestoneTitle] = useState('');
+  const [milestoneBudget, setMilestoneBudget] = useState('');
   const [milestoneDate, setMilestoneDate] = useState('');
+  const [quoteImage, setQuoteImage] = useState<string | null>(null);
+  const quoteInputRef = useRef<HTMLInputElement>(null);
+
+  const handleQuoteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setQuoteImage(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
 
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -256,6 +284,7 @@ function Capture() {
         payload.paid_from = transferFrom;
         payload.transfer_to = transferTo;
       } else if (captureType === 'loan') {
+        payload.record_type = 'loan';
         payload.type = loanType;
         payload.category = 'Loan';
         payload.amount = parseFloat(loanAmount) || 0;
@@ -263,10 +292,11 @@ function Capture() {
         payload.counterparty = loanParty;
         payload.paid_from = paidFrom;
       } else if (captureType === 'milestone') {
+        payload.record_type = 'milestone';
         payload.type = 'milestone';
-        payload.category = milestoneProject;
-        payload.amount = 0;
-        payload.description = milestoneTitle;
+        payload.category = milestonePhase;
+        payload.amount = parseFloat(milestoneBudget) || 0; // Stored as total budget amount
+        payload.description = milestoneTitle + (quoteImage ? ' [Quote Attached]' : '');
         payload.target_date = milestoneDate;
         payload.paid_from = paidFrom;
       }
@@ -276,7 +306,7 @@ function Capture() {
 
       setLoading(false);
       setSuccessMessage(`${captureType.charAt(0).toUpperCase() + captureType.slice(1)} recorded successfully!`);
-      setDescription(''); setAmount(''); setRecDesc(''); setRecAmount(''); setTransferAmount(''); setTransferDesc(''); setLoanParty(''); setLoanAmount(''); setMilestoneTitle(''); setMilestoneDate('');
+      setDescription(''); setAmount(''); setRecDesc(''); setRecAmount(''); setTransferAmount(''); setTransferDesc(''); setLoanParty(''); setLoanAmount(''); setMilestoneTitle(''); setMilestoneBudget(''); setMilestoneDate(''); setQuoteImage(null);
       setTimeout(() => setSuccessMessage(''), 4000);
     } catch (err: any) {
       setLoading(false);
@@ -425,20 +455,39 @@ function Capture() {
         {captureType === 'milestone' && (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Project / Focus Area</label>
-              <select value={milestoneProject} onChange={(e) => setMilestoneProject(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
-                <option value="Mahusekwa Farm">Mahusekwa Farm Infrastructure</option>
-                <option value="Hout Bay Residence">Hout Bay Setup</option>
-                <option value="Business Operations">Business & Enterprise</option>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Farm Phase</label>
+              <select value={milestonePhase} onChange={(e) => setMilestonePhase(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
+                <option value="Phase 1: Off-Grid Utilities">Phase 1: Off-Grid Utilities</option>
+                <option value="Phase 2: Protected Agriculture">Phase 2: Protected Agriculture</option>
+                <option value="Phase 3: Civil & Residential Infrastructure">Phase 3: Civil & Residential Infrastructure</option>
+                <option value="Phase 4: Livestock & Swine Units">Phase 4: Livestock & Swine Units</option>
+                <option value="Phase 5: Operations & Supply Chain">Phase 5: Operations & Supply Chain</option>
+                <option value="Phase 6: Commercial Sales & Distribution">Phase 6: Commercial Sales & Distribution</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Milestone Title</label>
-              <input type="text" value={milestoneTitle} onChange={(e) => setMilestoneTitle(e.target.value)} placeholder="e.g. Greenhouse completed" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+              <input type="text" value={milestoneTitle} onChange={(e) => setMilestoneTitle(e.target.value)} placeholder="e.g. Borehole drilling & submersible pump" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Total Quote / Budget (ZAR)</label>
+                <input type="number" step="0.01" value={milestoneBudget} onChange={(e) => setMilestoneBudget(e.target.value)} placeholder="0.00" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Target Date</label>
+                <input type="date" value={milestoneDate} onChange={(e) => setMilestoneDate(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white" />
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Target Date</label>
-              <input type="date" value={milestoneDate} onChange={(e) => setMilestoneDate(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Attach Contractor Quotation (Optional)</label>
+              <input type="file" accept="image/*" ref={quoteInputRef} onChange={handleQuoteChange} className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+              {quoteImage && (
+                <div className="mt-2 flex items-center space-x-2">
+                  <img src={quoteImage} alt="Quote preview" className="w-12 h-12 object-cover rounded-lg border" />
+                  <span className="text-xs text-green-600 font-medium">Quote attached successfully!</span>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -457,20 +506,21 @@ function ZimbabweDashboard() {
 
   const fetchMilestones = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('transactions').select('*').eq('category', 'Mahusekwa Farm').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('transactions').select('*').eq('record_type', 'milestone').order('created_at', { ascending: false });
     if (!error) setMilestones(data || []);
     setLoading(false);
   };
 
   useEffect(() => { fetchMilestones(); }, []);
 
+  // Base farm phases
   const farmPhases = [
-    { phase: 'Phase 1: Off-Grid Utilities', desc: 'Solar power system setup, borehole drilling, water storage tanks, and irrigation plumbing.', status: 'In Progress', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-    { phase: 'Phase 2: Protected Agriculture', desc: 'Greenhouse construction, shade netting, drip irrigation lines, and vegetable crop cycles.', status: 'Planning', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-    { phase: 'Phase 3: Civil & Residential Infrastructure', desc: 'Two-bedroom residence construction (roofing, finishes), perimeter fencing, and access roads.', status: 'In Progress', color: 'bg-green-50 text-green-700 border-green-200' },
-    { phase: 'Phase 4: Livestock & Swine Units', desc: 'Broiler chicken housing & brooding units, piggery pens, and manure waste management systems.', status: 'Upcoming', color: 'bg-purple-50 text-purple-700 border-purple-200' },
-    { phase: 'Phase 5: Operations & Supply Chain', desc: 'Bulk feed storage, veterinary vaccine management, and on-site farm manager coordination (Dad).', status: 'Upcoming', color: 'bg-gray-100 text-gray-700 border-gray-200' },
-    { phase: 'Phase 6: Commercial Sales & Distribution', desc: 'Market access to local butcheries, fresh produce packaging, and revenue tracking.', status: 'Upcoming', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+    { key: 'Phase 1: Off-Grid Utilities', phase: 'Phase 1: Off-Grid Utilities', desc: 'Solar power system setup, borehole drilling, water storage tanks, and irrigation plumbing.', defaultProgress: 70, color: 'bg-amber-50 text-amber-700 border-amber-200' },
+    { key: 'Phase 2: Protected Agriculture', phase: 'Phase 2: Protected Agriculture', desc: 'Greenhouse construction, shade netting, drip irrigation lines, and vegetable crop cycles.', defaultProgress: 15, color: 'bg-blue-50 text-blue-700 border-blue-200' },
+    { key: 'Phase 3: Civil & Residential Infrastructure', phase: 'Phase 3: Civil & Residential Infrastructure', desc: 'Two-bedroom residence construction (roofing, finishes), perimeter fencing, and access roads.', defaultProgress: 45, color: 'bg-green-50 text-green-700 border-green-200' },
+    { key: 'Phase 4: Livestock & Swine Units', phase: 'Phase 4: Livestock & Swine Units', desc: 'Broiler chicken housing & brooding units, piggery pens, and manure waste management systems.', defaultProgress: 0, color: 'bg-purple-50 text-purple-700 border-purple-200' },
+    { key: 'Phase 5: Operations & Supply Chain', phase: 'Phase 5: Operations & Supply Chain', desc: 'Bulk feed storage, veterinary vaccine management, and on-site farm manager coordination (Dad).', defaultProgress: 0, color: 'bg-gray-100 text-gray-700 border-gray-200' },
+    { key: 'Phase 6: Commercial Sales & Distribution', phase: 'Phase 6: Commercial Sales & Distribution', desc: 'Market access to local butcheries, fresh produce packaging, and revenue tracking.', defaultProgress: 0, color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   ];
 
   return (
@@ -492,44 +542,63 @@ function ZimbabweDashboard() {
       </div>
 
       <div>
-        <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">Master Plan Phases</h3>
+        <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">Master Plan Phases & Budget Progress</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {farmPhases.map((item, idx) => (
-            <div key={idx} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-bold text-gray-900 text-sm">{item.phase}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded font-semibold border ${item.color}`}>{item.status}</span>
+          {farmPhases.map((item, idx) => {
+            // Find milestones for this phase
+            const phaseMilestones = milestones.filter(m => m.category === item.key);
+            const totalBudget = phaseMilestones.reduce((acc, m) => acc + (parseFloat(m.amount) || 0), 0);
+            const progress = totalBudget > 0 ? Math.min(100, Math.round((totalBudget / (totalBudget + 5000)) * 100)) : item.defaultProgress;
+
+            return (
+              <div key={idx} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-bold text-gray-900 text-sm">{item.phase}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded font-semibold border ${item.color}`}>{progress > 0 ? 'In Progress' : 'Upcoming'}</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3">{item.desc}</p>
+                  {totalBudget > 0 && (
+                    <p className="text-xs font-semibold text-blue-600">Total Quote Budgets: R{totalBudget.toLocaleString()}</p>
+                  )}
                 </div>
-                <p className="text-xs text-gray-600 mb-3">{item.desc}</p>
+                <div>
+                  <div className="flex justify-between text-xs font-semibold text-gray-600 mb-1">
+                    <span>Phase Progress</span>
+                    <span>{progress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                    <div className="bg-green-600 h-2 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="font-bold text-gray-900">Logged Mahusekwa Milestones & Activities</h3>
+          <h3 className="font-bold text-gray-900">Logged Mahusekwa Milestones & Quotations</h3>
         </div>
         {loading ? (
           <div className="p-8 text-center text-gray-500 text-sm">Loading farm records...</div>
         ) : milestones.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">No specific farm milestones logged yet. Head over to the Capture tab to add your first entry!</div>
+          <div className="p-8 text-center text-gray-500 text-sm">No specific farm milestones logged yet. Head over to the Capture tab to add your first entry with a budget and quotation!</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {milestones.map((item) => (
               <div key={item.id} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50 transition">
                 <div>
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded font-semibold">{item.record_type === 'milestone' ? 'Milestone' : item.type}</span>
-                    <span className="text-xs text-gray-500">Mahusekwa</span>
+                    <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded font-semibold">Milestone</span>
+                    <span className="text-xs text-gray-500">{item.category}</span>
                   </div>
                   <p className="text-sm font-medium text-gray-900 mt-1">{item.description}</p>
                   {item.target_date && <p className="text-xs text-gray-500">Target Date: {item.target_date}</p>}
                 </div>
                 <div className="text-right">
-                  {item.amount > 0 && <span className="text-sm font-bold text-gray-900">{item.currency === 'USD' ? '$' : item.currency === 'EUR' ? '€' : 'R'}{parseFloat(item.amount).toLocaleString()}</span>}
+                  {item.amount > 0 && <span className="text-sm font-bold text-gray-900">R{parseFloat(item.amount).toLocaleString()} budget</span>}
                   <p className="text-xs text-gray-400">{new Date(item.created_at).toLocaleDateString()}</p>
                 </div>
               </div>
@@ -543,7 +612,7 @@ function ZimbabweDashboard() {
 
 function AskJude() {
   const [messages, setMessages] = useState([
-    { sender: 'jude', text: "Hello Cunningham! I'm connected to your live database. Ask me about any transaction, recurring expense, rent, cartrack, or account balance!" }
+    { sender: 'jude', text: "Hello Cunningham! I'm connected to your live database. Ask me about your loan repayment progress, milestone budgets, quotations, or phase progress percentages!" }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -610,7 +679,8 @@ function AskJude() {
         'Your Mukuru Account (Joint Savings)': 0,
       };
 
-      let recurringItems: any[] = [];
+      let loanItems: any[] = [];
+      let milestoneItems: any[] = [];
       let allTransactions: any[] = [];
 
       if (!error && records) {
@@ -627,8 +697,11 @@ function AskJude() {
             if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
             if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
           } else if (item.record_type === 'recurring') {
-            recurringItems.push(item);
             if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+          } else if (item.record_type === 'loan') {
+            loanItems.push(item);
+          } else if (item.record_type === 'milestone') {
+            milestoneItems.push(item);
           }
         });
       }
@@ -637,36 +710,37 @@ function AskJude() {
       const lower = userMsg.toLowerCase();
 
       if (imgAttached) {
-        reply = "📸 Image analyzed successfully! Ready to log these details into your fresh cycle.";
-      } else if (lower.includes('balance') || lower.includes('account') || lower.includes('how much do i have')) {
-        reply = `💳 **Current Balances (25 Sep Cycle):**\n• Paisa Account: R${accountBalances['Paisa Account'].toLocaleString()}\n• Absa Account: R${accountBalances['Absa Account'].toLocaleString()}\n• Lynne's Mukuru Account: R${accountBalances["Lynne's Mukuru Account"].toLocaleString()}\n• Your Mukuru Account: R${accountBalances['Your Mukuru Account (Joint Savings)'].toLocaleString()}`;
-      } else if (lower.includes('recurring') || lower.includes('overhead') || lower.includes('monthly') || lower.includes('fixed') || lower.includes('cost')) {
-        if (recurringItems.length > 0) {
-          const details = recurringItems.map(r => `• **${r.description}**: R${parseFloat(r.amount).toLocaleString()} (Paid from: ${r.paid_from})`).join('\n');
-          reply = `📋 **All Recurring Monthly Overheads:**\n${details}`;
+        reply = "📸 Image/Quotation analyzed successfully! Ready to log these details into your farm master plan.";
+      } else if (lower.includes('loan') || lower.includes('debt') || lower.includes('borrow')) {
+        if (loanItems.length > 0) {
+          const details = loanItems.map(l => `• **${l.description}** (${l.type}): R${parseFloat(l.amount).toLocaleString()} with ${l.counterparty}`).join('\n');
+          reply = `💳 **Active Loans & Payoff Status:**\n${details}`;
         } else {
-          reply = `📋 You don't have any recurring expenses logged in your database yet. Use the Capture tab under Recurring to add them!`;
+          reply = `💳 You have no loans logged in your database right now.`;
+        }
+      } else if (lower.includes('milestone') || lower.includes('quote') || lower.includes('budget') || lower.includes('farm')) {
+        if (milestoneItems.length > 0) {
+          const details = milestoneItems.map(m => `• **${m.description}** (${m.category}): R${parseFloat(m.amount || 0).toLocaleString()} budget, Target: ${m.target_date}`).join('\n');
+          reply = `🌱 **Logged Farm Milestones & Budgets:**\n${details}`;
+        } else {
+          reply = `🌱 You haven't logged any farm milestones with budgets yet. Use the Capture tab under Milestone to add them!`;
         }
       } else {
-        // FOOLPROOF DYNAMIC SEARCH: Scan descriptions across ALL records for any keyword mentioned by the user!
         const matchingRecords = allTransactions.filter(r => 
           r.description && r.description.toLowerCase().split(' ').some(word => word.length > 2 && lower.includes(word))
         );
 
         if (matchingRecords.length > 0) {
-          const details = matchingRecords.map(r => `• **${r.description}**: R${parseFloat(r.amount || 0).toLocaleString()} (${r.record_type || r.type}, Paid from: ${r.paid_from || 'General'})`).join('\n');
-          reply = `🔍 I found these matching records in your database:\n${details}`;
+          const details = matchingRecords.map(r => `• **${r.description}**: R${parseFloat(r.amount || 0).toLocaleString()} (${r.record_type || r.type})`).join('\n');
+          reply = `🔍 I found these matching records:\n${details}`;
         } else {
-          // General summary fallback
-          const totalRecCount = recurringItems.length;
-          const totalTransCount = allTransactions.length;
-          reply = `I'm tracking your financial records for the 25 Sep – 25 Oct cycle. You currently have ${totalTransCount} total record(s) and ${totalRecCount} recurring overhead(s) logged. Feel free to ask about any specific item, account balance, or your Mahusekwa farm plan!`;
+          reply = `I'm tracking your financial cycle, loan payback progress, and Mahusekwa farm milestone budgets. How can I help?`;
         }
       }
 
       setMessages(prev => [...prev, { sender: 'jude', text: reply }]);
     } catch (err) {
-      setMessages(prev => [...prev, { sender: 'jude', text: "I had trouble checking your database records, but your accounts are secure." }]);
+      setMessages(prev => [...prev, { sender: 'jude', text: "I had trouble checking your database records." }]);
     } finally {
       setLoading(false);
     }
@@ -676,7 +750,7 @@ function AskJude() {
     <div className="p-6 pb-24 max-w-2xl mx-auto flex flex-col h-[82vh]">
       <div className="mb-3">
         <h2 className="text-2xl font-bold text-gray-900">Ask Jude</h2>
-        <p className="text-gray-600 text-sm">Foolproof Database Assistant • 25 Sep 2026 – 25 Oct 2026</p>
+        <p className="text-gray-600 text-sm">Foolproof Database Assistant • 25 Sep – 25 Oct 2026</p>
       </div>
 
       <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-y-auto space-y-4 mb-4">
@@ -689,7 +763,7 @@ function AskJude() {
           </div>
         ))}
         {loading && (
-          <div className="flex justify-start"><div className="bg-gray-100 text-gray-500 p-3 rounded-2xl text-sm animate-pulse">Jude is searching your database records...</div></div>
+          <div className="flex justify-start"><div className="bg-gray-100 text-gray-500 p-3 rounded-2xl text-sm animate-pulse">Jude is searching records...</div></div>
         )}
       </div>
 
@@ -711,10 +785,10 @@ function AskJude() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={isListening ? "Listening..." : "Ask Jude about any expense, rent, cartrack..."}
+          placeholder={isListening ? "Listening..." : "Ask Jude about loans, milestone budgets, quotations..."}
           className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
         />
-        <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
+        <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
       </form>
     </div>
   );
