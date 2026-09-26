@@ -78,13 +78,6 @@ function MoneyDashboard() {
     }
   };
 
-  const handleClearAll = async () => {
-    if (confirm('Are you sure you want to clear ALL test records and start fresh? This cannot be undone.')) {
-      const { error } = await supabase.from('transactions').delete().eq('household_id', 'default-household');
-      if (!error) fetchRecords();
-    }
-  };
-
   const accountBalances: { [key: string]: number } = {
     'Paisa Account': 0,
     'Absa Account': 0,
@@ -129,10 +122,7 @@ function MoneyDashboard() {
           <h2 className="text-2xl font-bold text-gray-900">Money Dashboard</h2>
           <p className="text-gray-600 text-sm">Financial Period: <strong className="text-blue-600">25 Sep 2026 – 25 Oct 2026</strong></p>
         </div>
-        <div className="flex space-x-2">
-          <button onClick={fetchRecords} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">Refresh</button>
-          <button onClick={handleClearAll} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium rounded-lg transition">Clear All Data</button>
-        </div>
+        <button onClick={fetchRecords} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">Refresh</button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -170,7 +160,6 @@ function MoneyDashboard() {
           <div className="divide-y divide-gray-100">
             {loansList.map((loan) => {
               const loanAmt = parseFloat(loan.amount) || 0;
-              const progressPct = loan.type === 'borrowed' ? 30 : 60;
               return (
                 <div key={loan.id} className="p-6 space-y-3">
                   <div className="flex justify-between items-center">
