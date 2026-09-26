@@ -80,6 +80,7 @@ function MoneyDashboard() {
 
   const recurringExpenses: any[] = [];
   const loansList: any[] = [];
+  const today = new Date();
 
   records.forEach((item) => {
     const amt = parseFloat(item.amount) || 0;
@@ -94,7 +95,12 @@ function MoneyDashboard() {
       if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
     } else if (item.record_type === 'recurring') {
       recurringExpenses.push(item);
-      if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+      // ONLY deduct if due date has arrived or passed
+      const dueDate = item.due_date ? new Date(item.due_date) : null;
+      const isDue = !dueDate || dueDate <= today;
+      if (isDue && source && accountBalances[source] !== undefined) {
+        accountBalances[source] -= amt;
+      }
     } else if (item.record_type === 'loan') {
       loansList.push(item);
     }
@@ -179,28 +185,35 @@ function MoneyDashboard() {
         )}
       </div>
 
+      {/* Recurring Monthly Overheads with Due Date Status */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-          <h3 className="font-bold text-gray-900">Recurring Monthly Overheads</h3>
+          <h3 className="font-bold text-gray-900">Recurring Monthly Overheads & Due Dates</h3>
         </div>
         {recurringExpenses.length === 0 ? (
           <div className="p-6 text-center text-gray-500 text-sm">No recurring expenses logged for this cycle yet.</div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {recurringExpenses.map((item) => (
-              <div key={item.id} className="px-6 py-4 flex justify-between items-center">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs bg-rose-100 text-rose-800 px-2 py-0.5 rounded font-semibold">Monthly Recurring</span>
-                    <span className="text-xs text-gray-500 uppercase">{item.paid_from}</span>
+            {recurringExpenses.map((item) => {
+              const dueDate = item.due_date ? new Date(item.due_date) : null;
+              const isDue = !dueDate || dueDate <= today;
+              return (
+                <div key={item.id} className="px-6 py-4 flex justify-between items-center">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-xs px-2 py-0.5 rounded font-semibold ${isDue ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'}`}>
+                        {isDue ? 'Deducted (Due)' : `Upcoming (Due: ${item.due_date})`}
+                      </span>
+                      <span className="text-xs text-gray-500 uppercase">{item.paid_from}</span>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 mt-1">{item.description}</p>
                   </div>
-                  <p className="text-sm font-medium text-gray-900 mt-1">{item.description}</p>
+                  <div className="text-right">
+                    <span className="text-sm font-bold text-red-600">R{parseFloat(item.amount || 0).toLocaleString()} / mo</span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-sm font-bold text-red-600">R{parseFloat(item.amount || 0).toLocaleString()} / mo</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -224,6 +237,7 @@ function Capture() {
   const [recAmount, setRecAmount] = useState('');
   const [recAccount, setRecAccount] = useState('Paisa Account');
   const [recCategory, setRecCategory] = useState('Household');
+  const [recDueDate, setRecDueDate] = useState('');
 
   const [transferFrom, setTransferFrom] = useState('Paisa Account');
   const [transferTo, setTransferTo] = useState('Absa Account');
@@ -274,6 +288,7 @@ function Capture() {
         payload.amount = parseFloat(recAmount) || 0;
         payload.description = recDesc;
         payload.paid_from = recAccount;
+        payload.due_date = recDueDate; // Storing the specific due date
       } else if (captureType === 'transfer') {
         payload.record_type = 'transfer';
         payload.type = 'transfer';
@@ -305,7 +320,7 @@ function Capture() {
 
       setLoading(false);
       setSuccessMessage(`${captureType.charAt(0).toUpperCase() + captureType.slice(1)} recorded successfully!`);
-      setDescription(''); setAmount(''); setRecDesc(''); setRecAmount(''); setTransferAmount(''); setTransferDesc(''); setLoanParty(''); setLoanAmount(''); setMilestoneTitle(''); setMilestoneBudget(''); setMilestoneDate(''); setQuoteImage(null);
+      setDescription(''); setAmount(''); setRecDesc(''); setRecAmount(''); setRecDueDate(''); setTransferAmount(''); setTransferDesc(''); setLoanParty(''); setLoanAmount(''); setMilestoneTitle(''); setMilestoneBudget(''); setMilestoneDate(''); setQuoteImage(null);
       setTimeout(() => setSuccessMessage(''), 4000);
     } catch (err: any) {
       setLoading(false);
@@ -394,9 +409,15 @@ function Capture() {
                 </select>
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Amount (ZAR)</label>
-              <input type="number" step="0.01" value={recAmount} onChange={(e) => setRecAmount(e.target.value)} placeholder="0.00" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Amount (ZAR)</label>
+                <input type="number" step="0.01" value={recAmount} onChange={(e) => setRecAmount(e.target.value)} placeholder="0.00" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                <input type="date" value={recDueDate} onChange={(e) => setRecDueDate(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white" />
+              </div>
             </div>
           </>
         )}
@@ -556,12 +577,8 @@ function ZimbabweDashboard() {
           {farmPhases.map((item, idx) => {
             const phaseMilestones = milestones.filter(m => m.category === item.key);
             const totalBudget = phaseMilestones.reduce((acc, m) => acc + (parseFloat(m.amount) || 0), 0);
-            
-            // Total actual payments made for this phase
             const phaseExpenses = expenses.filter(e => e.category === item.key);
             const totalPaid = phaseExpenses.reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
-
-            // Calculate progress strictly from actual payments vs total budget (starts at 0% if no payments made)
             const progress = totalBudget > 0 ? Math.min(100, Math.round((totalPaid / totalBudget) * 100)) : 0;
 
             return (
@@ -601,7 +618,7 @@ function ZimbabweDashboard() {
         {loading ? (
           <div className="p-8 text-center text-gray-500 text-sm">Loading farm records...</div>
         ) : milestones.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">No specific farm milestones logged yet. Head over to the Capture tab to add your first entry with a budget and quotation!</div>
+          <div className="p-8 text-center text-gray-500 text-sm">No specific farm milestones logged yet.</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {milestones.map((item) => (
@@ -629,7 +646,7 @@ function ZimbabweDashboard() {
 
 function AskJude() {
   const [messages, setMessages] = useState([
-    { sender: 'jude', text: "Hello Cunningham! I'm connected to your live database. Ask me about your loan repayment progress, milestone budgets, quotations, or phase progress percentages!" }
+    { sender: 'jude', text: "Hello Cunningham! I'm connected to your live database. Ask me about your recurring overhead due dates, loan repayment progress, or farm milestones!" }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -696,8 +713,8 @@ function AskJude() {
         'Your Mukuru Account (Joint Savings)': 0,
       };
 
+      let recurringItems: any[] = [];
       let loanItems: any[] = [];
-      let milestoneItems: any[] = [];
       let allTransactions: any[] = [];
 
       if (!error && records) {
@@ -714,11 +731,9 @@ function AskJude() {
             if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
             if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
           } else if (item.record_type === 'recurring') {
-            if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+            recurringItems.push(item);
           } else if (item.record_type === 'loan') {
             loanItems.push(item);
-          } else if (item.record_type === 'milestone') {
-            milestoneItems.push(item);
           }
         });
       }
@@ -727,20 +742,13 @@ function AskJude() {
       const lower = userMsg.toLowerCase();
 
       if (imgAttached) {
-        reply = "📸 Image/Quotation analyzed successfully! Ready to log these details into your farm master plan.";
-      } else if (lower.includes('loan') || lower.includes('debt') || lower.includes('borrow')) {
-        if (loanItems.length > 0) {
-          const details = loanItems.map(l => `• **${l.description}** (${l.type}): R${parseFloat(l.amount).toLocaleString()} with ${l.counterparty}`).join('\n');
-          reply = `💳 **Active Loans & Payoff Status:**\n${details}`;
+        reply = "📸 Image analyzed successfully!";
+      } else if (lower.includes('recurring') || lower.includes('due') || lower.includes('rent') || lower.includes('overhead')) {
+        if (recurringItems.length > 0) {
+          const details = recurringItems.map(r => `• **${r.description}**: R${parseFloat(r.amount).toLocaleString()} (Due: ${r.due_date || 'Not set'})`).join('\n');
+          reply = `📋 **Recurring Overheads & Due Dates:**\n${details}`;
         } else {
-          reply = `💳 You have no loans logged in your database right now.`;
-        }
-      } else if (lower.includes('milestone') || lower.includes('quote') || lower.includes('budget') || lower.includes('farm')) {
-        if (milestoneItems.length > 0) {
-          const details = milestoneItems.map(m => `• **${m.description}** (${m.category}): R${parseFloat(m.amount || 0).toLocaleString()} budget, Target: ${m.target_date}`).join('\n');
-          reply = `🌱 **Logged Farm Milestones & Budgets:**\n${details}`;
-        } else {
-          reply = `🌱 You haven't logged any farm milestones with budgets yet. Use the Capture tab under Milestone to add them!`;
+          reply = `📋 No recurring overheads logged yet.`;
         }
       } else {
         const matchingRecords = allTransactions.filter(r => 
@@ -751,7 +759,7 @@ function AskJude() {
           const details = matchingRecords.map(r => `• **${r.description}**: R${parseFloat(r.amount || 0).toLocaleString()} (${r.record_type || r.type})`).join('\n');
           reply = `🔍 I found these matching records:\n${details}`;
         } else {
-          reply = `I'm tracking your financial cycle, loan payback progress, and Mahusekwa farm milestone budgets. How can I help?`;
+          reply = `I'm tracking your recurring due dates, account balances, and Mahusekwa farm budgets. How can I help?`;
         }
       }
 
@@ -802,7 +810,7 @@ function AskJude() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={isListening ? "Listening..." : "Ask Jude about loans, milestone budgets, quotations..."}
+          placeholder={isListening ? "Listening..." : "Ask Jude about due dates, recurring expenses, balances..."}
           className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
         />
         <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
