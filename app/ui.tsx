@@ -104,11 +104,28 @@ function MoneyDashboard() {
       if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
       if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
     } else if (item.record_type === 'recurring') {
-      recurringExpenses.push(item);
-      const dueDate = item.due_date ? new Date(item.due_date) : null;
-      const isDue = !dueDate || dueDate <= today;
-      if (isDue && source && accountBalances[source] !== undefined) {
-        accountBalances[source] -= amt;
+      const startDate = item.due_date ? new Date(item.due_date) : new Date(item.created_at);
+      const dayOfMonth = startDate.getDate();
+      
+      let curr = new Date(startDate.getFullYear(), startDate.getMonth(), dayOfMonth);
+      const limitDate = new Date(today.getFullYear(), today.getMonth() + 1, dayOfMonth);
+
+      while (curr <= limitDate) {
+        const isDue = curr <= today;
+        const occurrenceItem = {
+          ...item,
+          id: `${item.id}_${curr.toISOString().slice(0, 7)}`,
+          original_id: item.id,
+          virtual_due_date: curr.toISOString().slice(0, 10),
+          is_due: isDue
+        };
+        recurringExpenses.push(occurrenceItem);
+
+        if (isDue && source && accountBalances[source] !== undefined) {
+          accountBalances[source] -= amt;
+        }
+
+        curr.setMonth(curr.getMonth() + 1);
       }
     } else if (item.record_type === 'loan') {
       loansList.push(item);
@@ -197,14 +214,13 @@ function MoneyDashboard() {
         ) : (
           <div className="divide-y divide-gray-100">
             {recurringExpenses.map((item) => {
-              const dueDate = item.due_date ? new Date(item.due_date) : null;
-              const isDue = !dueDate || dueDate <= today;
+              const isDue = item.is_due;
               return (
                 <div key={item.id} className="px-6 py-4 flex justify-between items-center">
                   <div>
                     <div className="flex items-center space-x-2">
                       <span className={`text-xs px-2 py-0.5 rounded font-semibold ${isDue ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'}`}>
-                        {isDue ? 'Deducted (Due)' : `Upcoming (Due: ${item.due_date})`}
+                        {isDue ? 'Deducted (Due)' : `Upcoming (Due: ${item.virtual_due_date})`}
                       </span>
                       <span className="text-xs text-gray-500 uppercase">{item.paid_from}</span>
                     </div>
@@ -212,7 +228,7 @@ function MoneyDashboard() {
                   </div>
                   <div className="text-right flex items-center space-x-4">
                     <span className="text-sm font-bold text-red-600">R{parseFloat(item.amount || 0).toLocaleString()} / mo</span>
-                    <button onClick={() => handleDeleteRecord(item.id)} className="text-xs bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 px-2.5 py-1.5 rounded-lg transition">Delete</button>
+                    <button onClick={() => handleDeleteRecord(item.original_id)} className="text-xs bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 px-2.5 py-1.5 rounded-lg transition">Delete</button>
                   </div>
                 </div>
               );
