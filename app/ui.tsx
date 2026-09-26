@@ -145,7 +145,7 @@ function MoneyDashboard() {
           <div className="divide-y divide-gray-100">
             {loansList.map((loan) => {
               const loanAmt = parseFloat(loan.amount) || 0;
-              const progressPct = loan.type === 'borrowed' ? 30 : 60; // Dynamic or adjustable repayment progress
+              const progressPct = loan.type === 'borrowed' ? 30 : 60;
               return (
                 <div key={loan.id} className="p-6 space-y-3">
                   <div className="flex justify-between items-center">
@@ -215,7 +215,7 @@ function Capture() {
 
   const [type, setType] = useState('expense');
   const [currency, setCurrency] = useState('ZAR');
-  const [category, setCategory] = useState('Household');
+  const [category, setCategory] = useState('Phase 1: Off-Grid Utilities');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [paidFrom, setPaidFrom] = useState('Paisa Account');
@@ -234,7 +234,6 @@ function Capture() {
   const [loanAmount, setLoanAmount] = useState('');
   const [loanType, setLoanType] = useState('borrowed');
 
-  // Milestone specific state with budget & quote attachment
   const [milestonePhase, setMilestonePhase] = useState('Phase 1: Off-Grid Utilities');
   const [milestoneTitle, setMilestoneTitle] = useState('');
   const [milestoneBudget, setMilestoneBudget] = useState('');
@@ -295,7 +294,7 @@ function Capture() {
         payload.record_type = 'milestone';
         payload.type = 'milestone';
         payload.category = milestonePhase;
-        payload.amount = parseFloat(milestoneBudget) || 0; // Stored as total budget amount
+        payload.amount = parseFloat(milestoneBudget) || 0;
         payload.description = milestoneTitle + (quoteImage ? ' [Quote Attached]' : '');
         payload.target_date = milestoneDate;
         payload.paid_from = paidFrom;
@@ -344,9 +343,17 @@ function Capture() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category / Farm Phase</label>
                 <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white">
-                  <option value="Household">Household (Hout Bay)</option><option value="Farm">Farm (Mahusekwa)</option><option value="Business">Business / Operations</option><option value="Personal">Personal</option>
+                  <option value="Phase 1: Off-Grid Utilities">Phase 1: Off-Grid Utilities</option>
+                  <option value="Phase 2: Protected Agriculture">Phase 2: Protected Agriculture</option>
+                  <option value="Phase 3: Civil & Residential Infrastructure">Phase 3: Civil & Residential Infrastructure</option>
+                  <option value="Phase 4: Livestock & Swine Units">Phase 4: Livestock & Swine Units</option>
+                  <option value="Phase 5: Operations & Supply Chain">Phase 5: Operations & Supply Chain</option>
+                  <option value="Phase 6: Commercial Sales & Distribution">Phase 6: Commercial Sales & Distribution</option>
+                  <option value="Household">Household (Hout Bay)</option>
+                  <option value="Business">Business / Operations</option>
+                  <option value="Personal">Personal</option>
                 </select>
               </div>
             </div>
@@ -358,7 +365,7 @@ function Capture() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Salary, Groceries" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
+              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Borehole deposit payment" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
@@ -501,27 +508,29 @@ function Capture() {
 }
 
 function ZimbabweDashboard() {
-  const [milestones, setMilestones] = useState<any[]>([]);
+  const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchMilestones = async () => {
+  const fetchRecords = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('transactions').select('*').eq('record_type', 'milestone').order('created_at', { ascending: false });
-    if (!error) setMilestones(data || []);
+    const { data, error } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+    if (!error) setRecords(data || []);
     setLoading(false);
   };
 
-  useEffect(() => { fetchMilestones(); }, []);
+  useEffect(() => { fetchRecords(); }, []);
 
-  // Base farm phases
   const farmPhases = [
-    { key: 'Phase 1: Off-Grid Utilities', phase: 'Phase 1: Off-Grid Utilities', desc: 'Solar power system setup, borehole drilling, water storage tanks, and irrigation plumbing.', defaultProgress: 70, color: 'bg-amber-50 text-amber-700 border-amber-200' },
-    { key: 'Phase 2: Protected Agriculture', phase: 'Phase 2: Protected Agriculture', desc: 'Greenhouse construction, shade netting, drip irrigation lines, and vegetable crop cycles.', defaultProgress: 15, color: 'bg-blue-50 text-blue-700 border-blue-200' },
-    { key: 'Phase 3: Civil & Residential Infrastructure', phase: 'Phase 3: Civil & Residential Infrastructure', desc: 'Two-bedroom residence construction (roofing, finishes), perimeter fencing, and access roads.', defaultProgress: 45, color: 'bg-green-50 text-green-700 border-green-200' },
-    { key: 'Phase 4: Livestock & Swine Units', phase: 'Phase 4: Livestock & Swine Units', desc: 'Broiler chicken housing & brooding units, piggery pens, and manure waste management systems.', defaultProgress: 0, color: 'bg-purple-50 text-purple-700 border-purple-200' },
-    { key: 'Phase 5: Operations & Supply Chain', phase: 'Phase 5: Operations & Supply Chain', desc: 'Bulk feed storage, veterinary vaccine management, and on-site farm manager coordination (Dad).', defaultProgress: 0, color: 'bg-gray-100 text-gray-700 border-gray-200' },
-    { key: 'Phase 6: Commercial Sales & Distribution', phase: 'Phase 6: Commercial Sales & Distribution', desc: 'Market access to local butcheries, fresh produce packaging, and revenue tracking.', defaultProgress: 0, color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+    { key: 'Phase 1: Off-Grid Utilities', phase: 'Phase 1: Off-Grid Utilities', desc: 'Solar power system setup, borehole drilling, water storage tanks, and irrigation plumbing.', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+    { key: 'Phase 2: Protected Agriculture', phase: 'Phase 2: Protected Agriculture', desc: 'Greenhouse construction, shade netting, drip irrigation lines, and vegetable crop cycles.', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+    { key: 'Phase 3: Civil & Residential Infrastructure', phase: 'Phase 3: Civil & Residential Infrastructure', desc: 'Two-bedroom residence construction (roofing, finishes), perimeter fencing, and access roads.', color: 'bg-green-50 text-green-700 border-green-200' },
+    { key: 'Phase 4: Livestock & Swine Units', phase: 'Phase 4: Livestock & Swine Units', desc: 'Broiler chicken housing & brooding units, piggery pens, and manure waste management systems.', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+    { key: 'Phase 5: Operations & Supply Chain', phase: 'Phase 5: Operations & Supply Chain', desc: 'Bulk feed storage, veterinary vaccine management, and on-site farm manager coordination (Dad).', color: 'bg-gray-100 text-gray-700 border-gray-200' },
+    { key: 'Phase 6: Commercial Sales & Distribution', phase: 'Phase 6: Commercial Sales & Distribution', desc: 'Market access to local butcheries, fresh produce packaging, and revenue tracking.', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   ];
+
+  const milestones = records.filter(r => r.record_type === 'milestone');
+  const expenses = records.filter(r => r.record_type === 'transaction' && r.type === 'expense');
 
   return (
     <div className="p-6 pb-24 max-w-4xl mx-auto space-y-8">
@@ -530,7 +539,7 @@ function ZimbabweDashboard() {
           <h2 className="text-2xl font-bold text-gray-900">Mahusekwa Farm & Zimbabwe</h2>
           <p className="text-gray-600 text-sm">5,000 sqm greenfield agricultural estate & project master plan.</p>
         </div>
-        <button onClick={fetchMilestones} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">Refresh</button>
+        <button onClick={fetchRecords} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">Refresh</button>
       </div>
 
       <div className="bg-gradient-to-r from-green-800 to-emerald-900 text-white p-6 rounded-2xl shadow-sm space-y-2">
@@ -542,29 +551,37 @@ function ZimbabweDashboard() {
       </div>
 
       <div>
-        <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">Master Plan Phases & Budget Progress</h3>
+        <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3">Master Plan Phases & Live Payment Progress</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {farmPhases.map((item, idx) => {
-            // Find milestones for this phase
             const phaseMilestones = milestones.filter(m => m.category === item.key);
             const totalBudget = phaseMilestones.reduce((acc, m) => acc + (parseFloat(m.amount) || 0), 0);
-            const progress = totalBudget > 0 ? Math.min(100, Math.round((totalBudget / (totalBudget + 5000)) * 100)) : item.defaultProgress;
+            
+            // Total actual payments made for this phase
+            const phaseExpenses = expenses.filter(e => e.category === item.key);
+            const totalPaid = phaseExpenses.reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
+
+            // Calculate progress strictly from actual payments vs total budget (starts at 0% if no payments made)
+            const progress = totalBudget > 0 ? Math.min(100, Math.round((totalPaid / totalBudget) * 100)) : 0;
 
             return (
               <div key={idx} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between space-y-4">
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <span className="font-bold text-gray-900 text-sm">{item.phase}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded font-semibold border ${item.color}`}>{progress > 0 ? 'In Progress' : 'Upcoming'}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded font-semibold border ${item.color}`}>
+                      {progress > 0 ? `${progress}% Paid` : totalBudget > 0 ? 'Budget Set (0% Paid)' : 'Upcoming'}
+                    </span>
                   </div>
-                  <p className="text-xs text-gray-600 mb-3">{item.desc}</p>
-                  {totalBudget > 0 && (
-                    <p className="text-xs font-semibold text-blue-600">Total Quote Budgets: R{totalBudget.toLocaleString()}</p>
-                  )}
+                  <p className="text-xs text-gray-600 mb-2">{item.desc}</p>
+                  <div className="flex justify-between text-xs text-gray-500 font-medium">
+                    <span>Quote Budget: R{totalBudget.toLocaleString()}</span>
+                    <span>Paid: R{totalPaid.toLocaleString()}</span>
+                  </div>
                 </div>
                 <div>
                   <div className="flex justify-between text-xs font-semibold text-gray-600 mb-1">
-                    <span>Phase Progress</span>
+                    <span>Payment Progress</span>
                     <span>{progress}%</span>
                   </div>
                   <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
@@ -788,7 +805,7 @@ function AskJude() {
           placeholder={isListening ? "Listening..." : "Ask Jude about loans, milestone budgets, quotations..."}
           className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
         />
-        <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
+        <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
       </form>
     </div>
   );
