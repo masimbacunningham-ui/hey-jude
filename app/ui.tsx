@@ -107,7 +107,6 @@ function MoneyDashboard() {
         <button onClick={fetchRecords} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">Refresh</button>
       </div>
 
-      {/* Account Balances Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
           <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-semibold">Primary Income</span>
@@ -131,10 +130,9 @@ function MoneyDashboard() {
         </div>
       </div>
 
-      {/* Recurring Expenses / Fixed Overheads */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-          <h3 className="font-bold text-gray-900">Recurring Monthly Overheads (Rent, WiFi, Cartrack)</h3>
+          <h3 className="font-bold text-gray-900">Recurring Monthly Overheads</h3>
         </div>
         {recurringExpenses.length === 0 ? (
           <div className="p-6 text-center text-gray-500 text-sm">No recurring expenses logged for this cycle yet. Use the Capture tab to add them!</div>
@@ -158,7 +156,6 @@ function MoneyDashboard() {
         )}
       </div>
 
-      {/* Recent Activity Feed */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100">
           <h3 className="font-bold text-gray-900">Current Cycle Activity & Logs</h3>
@@ -166,7 +163,7 @@ function MoneyDashboard() {
         {loading ? (
           <div className="p-8 text-center text-gray-500 text-sm">Loading records...</div>
         ) : records.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">No records logged for this cycle yet. Head over to Capture to start recording!</div>
+          <div className="p-8 text-center text-gray-500 text-sm">No records logged for this cycle yet.</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {records.map((item) => (
@@ -546,7 +543,7 @@ function ZimbabweDashboard() {
 
 function AskJude() {
   const [messages, setMessages] = useState([
-    { sender: 'jude', text: "Hello Cunningham! Your financial month cycle (25 Sep to 25 Oct) is freshly underway and all test records have been cleared. What would you like to log first?" }
+    { sender: 'jude', text: "Hello Cunningham! I'm connected to your live database. Ask me about any transaction, recurring expense, rent, cartrack, or account balance!" }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -613,7 +610,11 @@ function AskJude() {
         'Your Mukuru Account (Joint Savings)': 0,
       };
 
+      let recurringItems: any[] = [];
+      let allTransactions: any[] = [];
+
       if (!error && records) {
+        allTransactions = records;
         records.forEach((item) => {
           const amt = parseFloat(item.amount) || 0;
           const source = item.paid_from;
@@ -626,25 +627,46 @@ function AskJude() {
             if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
             if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
           } else if (item.record_type === 'recurring') {
+            recurringItems.push(item);
             if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
           }
         });
       }
 
-      let reply = "I'm ready for your actual records for this cycle!";
+      let reply = "";
       const lower = userMsg.toLowerCase();
 
       if (imgAttached) {
         reply = "📸 Image analyzed successfully! Ready to log these details into your fresh cycle.";
-      } else if (lower.includes('balance') || lower.includes('account')) {
-        reply = `💳 **Current Balances (25 Sep Cycle):**\n• Paisa: R${accountBalances['Paisa Account'].toLocaleString()}\n• Absa: R${accountBalances['Absa Account'].toLocaleString()}\n• Lynne's Mukuru: R${accountBalances["Lynne's Mukuru Account"].toLocaleString()}\n• Your Mukuru: R${accountBalances['Your Mukuru Account (Joint Savings)'].toLocaleString()}`;
+      } else if (lower.includes('balance') || lower.includes('account') || lower.includes('how much do i have')) {
+        reply = `💳 **Current Balances (25 Sep Cycle):**\n• Paisa Account: R${accountBalances['Paisa Account'].toLocaleString()}\n• Absa Account: R${accountBalances['Absa Account'].toLocaleString()}\n• Lynne's Mukuru Account: R${accountBalances["Lynne's Mukuru Account"].toLocaleString()}\n• Your Mukuru Account: R${accountBalances['Your Mukuru Account (Joint Savings)'].toLocaleString()}`;
+      } else if (lower.includes('recurring') || lower.includes('overhead') || lower.includes('monthly') || lower.includes('fixed') || lower.includes('cost')) {
+        if (recurringItems.length > 0) {
+          const details = recurringItems.map(r => `• **${r.description}**: R${parseFloat(r.amount).toLocaleString()} (Paid from: ${r.paid_from})`).join('\n');
+          reply = `📋 **All Recurring Monthly Overheads:**\n${details}`;
+        } else {
+          reply = `📋 You don't have any recurring expenses logged in your database yet. Use the Capture tab under Recurring to add them!`;
+        }
       } else {
-        reply = `Your accounts are clean and ready for your live transactions starting today, September 25th. How can I help?`;
+        // FOOLPROOF DYNAMIC SEARCH: Scan descriptions across ALL records for any keyword mentioned by the user!
+        const matchingRecords = allTransactions.filter(r => 
+          r.description && r.description.toLowerCase().split(' ').some(word => word.length > 2 && lower.includes(word))
+        );
+
+        if (matchingRecords.length > 0) {
+          const details = matchingRecords.map(r => `• **${r.description}**: R${parseFloat(r.amount || 0).toLocaleString()} (${r.record_type || r.type}, Paid from: ${r.paid_from || 'General'})`).join('\n');
+          reply = `🔍 I found these matching records in your database:\n${details}`;
+        } else {
+          // General summary fallback
+          const totalRecCount = recurringItems.length;
+          const totalTransCount = allTransactions.length;
+          reply = `I'm tracking your financial records for the 25 Sep – 25 Oct cycle. You currently have ${totalTransCount} total record(s) and ${totalRecCount} recurring overhead(s) logged. Feel free to ask about any specific item, account balance, or your Mahusekwa farm plan!`;
+        }
       }
 
       setMessages(prev => [...prev, { sender: 'jude', text: reply }]);
     } catch (err) {
-      setMessages(prev => [...prev, { sender: 'jude', text: "Ready for your new cycle entries!" }]);
+      setMessages(prev => [...prev, { sender: 'jude', text: "I had trouble checking your database records, but your accounts are secure." }]);
     } finally {
       setLoading(false);
     }
@@ -654,7 +676,7 @@ function AskJude() {
     <div className="p-6 pb-24 max-w-2xl mx-auto flex flex-col h-[82vh]">
       <div className="mb-3">
         <h2 className="text-2xl font-bold text-gray-900">Ask Jude</h2>
-        <p className="text-gray-600 text-sm">Financial Period: 25 Sep 2026 – 25 Oct 2026</p>
+        <p className="text-gray-600 text-sm">Foolproof Database Assistant • 25 Sep 2026 – 25 Oct 2026</p>
       </div>
 
       <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-y-auto space-y-4 mb-4">
@@ -667,7 +689,7 @@ function AskJude() {
           </div>
         ))}
         {loading && (
-          <div className="flex justify-start"><div className="bg-gray-100 text-gray-500 p-3 rounded-2xl text-sm animate-pulse">Jude is checking your records...</div></div>
+          <div className="flex justify-start"><div className="bg-gray-100 text-gray-500 p-3 rounded-2xl text-sm animate-pulse">Jude is searching your database records...</div></div>
         )}
       </div>
 
@@ -689,7 +711,7 @@ function AskJude() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={isListening ? "Listening..." : "Ask Jude..."}
+          placeholder={isListening ? "Listening..." : "Ask Jude about any expense, rent, cartrack..."}
           className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
         />
         <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
