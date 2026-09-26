@@ -708,7 +708,7 @@ function ZimbabweDashboard() {
 
 function AskJude() {
   const [messages, setMessages] = useState([
-    { sender: 'jude', text: "Hello Cunningham! I'm connected to your live database. Ask me about your recurring overhead due dates, loan repayment progress, or upload a receipt photo with account details to auto-capture!" }
+    { sender: 'jude', text: "Hello Cunningham! I'm connected to your live database. Ask me about your recurring overhead due dates, or type a transaction/upload a receipt to auto-capture!" }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -769,9 +769,13 @@ function AskJude() {
       let reply = "";
       const lower = userMsg.toLowerCase();
 
-      // If an image is attached, intelligently parse amount, account, and auto-capture to Supabase!
-      if (imgAttached) {
-        const amtMatch = userMsg.match(/(\d+(\.\d+)?)/);
+      // Check if message is a query or command
+      const isQuery = lower.includes('recurring') || lower.includes('due') || lower.includes('rent') || lower.includes('overhead') || lower.includes('find') || lower.includes('show');
+      const amtMatch = userMsg.match(/(\d+(\.\d+)?)/);
+      const hasAmount = amtMatch !== null;
+
+      // Auto-capture if image is attached OR if text contains an amount and isn't just a general query
+      if (imgAttached || (hasAmount && !isQuery)) {
         const amount = amtMatch ? parseFloat(amtMatch[1]) : 0;
         const description = userMsg || "Scanned Receipt Expense";
 
@@ -792,18 +796,18 @@ function AskJude() {
           category: lower.includes('farm') || lower.includes('fencing') || lower.includes('pipe') || lower.includes('fuel') ? 'Phase 3: Civil & Residential Infrastructure' : 'Household',
           amount: amount,
           currency: 'ZAR',
-          description: description + ' [Receipt Scanned]',
+          description: description + (imgAttached ? ' [Receipt Scanned]' : ''),
           paid_from: paidFromAccount
         };
 
         const { error } = await supabase.from('transactions').insert([payload]);
         
         if (error) {
-          reply = `❌ Failed to save receipt to database: ${error.message}`;
+          reply = `❌ Failed to save transaction to database: ${error.message}`;
         } else {
-          reply = `📸 **Receipt Analyzed & Captured Successfully!**\n• **Description**: ${description}\n• **Amount**: R${amount.toLocaleString()}\n• **Paid From**: ${paidFromAccount}\n\nSaved to database and balance updated!`;
+          reply = `✅ **Transaction Captured Successfully!**\n• **Description**: ${description}\n• **Amount**: R${amount.toLocaleString()}\n• **Paid From**: ${paidFromAccount}\n\nSaved to database and balance updated!`;
         }
-      } else if (lower.includes('recurring') || lower.includes('due') || lower.includes('rent') || lower.includes('overhead')) {
+      } else if (isQuery && (lower.includes('recurring') || lower.includes('due') || lower.includes('rent') || lower.includes('overhead'))) {
         const { data: records } = await supabase.from('transactions').select('*').eq('record_type', 'recurring');
         if (records && records.length > 0) {
           const details = records.map(r => `• **${r.description}**: R${parseFloat(r.amount).toLocaleString()} (Due: ${r.due_date || 'Not set'})`).join('\n');
@@ -821,7 +825,7 @@ function AskJude() {
           const details = matchingRecords.map(r => `• **${r.description}**: R${parseFloat(r.amount || 0).toLocaleString()} (${r.record_type || r.type})`).join('\n');
           reply = `🔍 I found these matching records:\n${details}`;
         } else {
-          reply = `I'm tracking your recurring due dates, account balances, and Mahusekwa farm budgets. How can I help?`;
+          reply = `I'm tracking your recurring due dates, account balances, and Mahusekwa farm budgets. Type an expense with an amount (e.g. "Fuel R500 Absa") or upload a receipt to auto-capture!`;
         }
       }
 
@@ -850,7 +854,7 @@ function AskJude() {
           </div>
         ))}
         {loading && (
-          <div className="flex justify-start"><div className="bg-gray-100 text-gray-500 p-3 rounded-2xl text-sm animate-pulse">Jude is analyzing and saving receipt...</div></div>
+          <div className="flex justify-start"><div className="bg-gray-100 text-gray-500 p-3 rounded-2xl text-sm animate-pulse">Jude is analyzing and saving transaction...</div></div>
         )}
       </div>
 
@@ -872,7 +876,7 @@ function AskJude() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={isListening ? "Listening..." : "Type description, amount & account (e.g. Fuel R600 Absa)..."}
+          placeholder={isListening ? "Listening..." : "Type description, amount & account (e.g. Fuel R500 Absa)..."}
           className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
         />
         <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
