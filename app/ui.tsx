@@ -85,6 +85,15 @@ function MoneyDashboard() {
     'Your Mukuru Account (Joint Savings)': 0,
   };
 
+  let totalIncome = 0;
+  let totalExpenses = 0;
+  let breakdown = {
+    household: 0,
+    recurring: 0,
+    farm: 0,
+    savingsOrOther: 0
+  };
+
   const recurringExpenses: any[] = [];
   const loansList: any[] = [];
   const standardTransactions: any[] = [];
@@ -97,8 +106,22 @@ function MoneyDashboard() {
 
     if (item.record_type === 'transaction') {
       standardTransactions.push(item);
-      if (item.type === 'income' && source && accountBalances[source] !== undefined) accountBalances[source] += amt;
-      else if (item.type === 'expense' && source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+      if (item.type === 'income') {
+        totalIncome += amt;
+        if (source && accountBalances[source] !== undefined) accountBalances[source] += amt;
+      } else if (item.type === 'expense') {
+        totalExpenses += amt;
+        if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+        
+        // Categorize allocation for "Where the Money Goes"
+        if (item.category?.includes('Phase') || item.description?.toLowerCase().includes('farm') || item.description?.toLowerCase().includes('fencing') || item.description?.toLowerCase().includes('pipe')) {
+          breakdown.farm += amt;
+        } else if (item.category === 'Household') {
+          breakdown.household += amt;
+        } else {
+          breakdown.savingsOrOther += amt;
+        }
+      }
     } else if (item.record_type === 'transfer') {
       standardTransactions.push(item);
       if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
@@ -121,8 +144,12 @@ function MoneyDashboard() {
         };
         recurringExpenses.push(occurrenceItem);
 
-        if (isDue && source && accountBalances[source] !== undefined) {
-          accountBalances[source] -= amt;
+        if (isDue) {
+          totalExpenses += amt;
+          breakdown.recurring += amt;
+          if (source && accountBalances[source] !== undefined) {
+            accountBalances[source] -= amt;
+          }
         }
 
         curr.setMonth(curr.getMonth() + 1);
@@ -132,6 +159,11 @@ function MoneyDashboard() {
     }
   });
 
+  const grandTotalOutflow = totalExpenses;
+  const householdPct = grandTotalOutflow > 0 ? Math.round(((breakdown.household + breakdown.recurring) / grandTotalOutflow) * 100) : 0;
+  const farmPct = grandTotalOutflow > 0 ? Math.round((breakdown.farm / grandTotalOutflow) * 100) : 0;
+  const otherPct = Math.max(0, 100 - householdPct - farmPct);
+
   return (
     <div className="p-6 pb-24 max-w-4xl mx-auto space-y-8">
       <div className="flex justify-between items-center">
@@ -140,6 +172,38 @@ function MoneyDashboard() {
           <p className="text-gray-600 text-sm">Financial Period: <strong className="text-blue-600">25 Sep 2026 – 25 Oct 2026</strong></p>
         </div>
         <button onClick={fetchRecords} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">Refresh</button>
+      </div>
+
+      {/* Where the Money Goes - Transparency Card for Lynne */}
+      <div className="bg-gradient-to-br from-blue-900 to-indigo-900 text-white p-6 rounded-2xl shadow-sm space-y-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <span className="text-xs bg-blue-800 text-blue-200 px-2.5 py-1 rounded-full font-semibold uppercase tracking-wider">Cash Flow & Transparency</span>
+            <h3 className="text-xl font-bold mt-1">Where the Money Goes</h3>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-blue-200">Total Inflow</p>
+            <p className="text-lg font-extrabold text-emerald-400">R{totalIncome.toLocaleString()}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-blue-800">
+          <div className="bg-blue-800/50 p-3.5 rounded-xl border border-blue-700/50">
+            <span className="text-xs text-blue-300">🏠 Household & Overheads</span>
+            <p className="text-lg font-bold mt-1">R{(breakdown.household + breakdown.recurring).toLocaleString()}</p>
+            <p className="text-xs text-blue-300 mt-0.5">{householdPct}% of total outflow</p>
+          </div>
+          <div className="bg-blue-800/50 p-3.5 rounded-xl border border-blue-700/50">
+            <span className="text-xs text-blue-300">🚜 Mahusekwa Farm Estate</span>
+            <p className="text-lg font-bold mt-1">R{breakdown.farm.toLocaleString()}</p>
+            <p className="text-xs text-blue-300 mt-0.5">{farmPct}% of total outflow</p>
+          </div>
+          <div className="bg-blue-800/50 p-3.5 rounded-xl border border-blue-700/50">
+            <span className="text-xs text-blue-300">💳 Other / Savings</span>
+            <p className="text-lg font-bold mt-1">R{breakdown.savingsOrOther.toLocaleString()}</p>
+            <p className="text-xs text-blue-300 mt-0.5">{otherPct}% of total outflow</p>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -804,7 +868,6 @@ function AskJude() {
       
       const isQuery = lower.includes('how much') || lower.includes('what') || lower.includes('show') || lower.includes('find') || lower.includes('balance') || lower.includes('saved') || lower.includes('total') || lower.includes('recurring') || lower.includes('spent') || lower.includes('cost');
 
-      // 1. Auto-Capture if image attached OR if user typed an amount without asking a query
       if (imgAttached || (hasAmount && !isQuery)) {
         const amount = amtMatch ? parseFloat(amtMatch[1]) : 0;
         const description = userMsg || "Scanned Receipt Expense";
@@ -832,7 +895,6 @@ function AskJude() {
           reply = `Transaction Captured Successfully!\n• Description: ${description}\n• Amount: R${amount.toLocaleString()}\n• Paid From: ${paidFromAccount}\n\nSaved to database and balance updated!`;
         }
       } 
-      // 2. Reasoning for Recurring / Overheads
       else if (lower.includes('recurring') || lower.includes('overhead')) {
         if (recurringItems.length > 0) {
           const totalMonthly = recurringItems.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
@@ -842,7 +904,6 @@ function AskJude() {
           reply = `No recurring overheads logged yet.`;
         }
       }
-      // 3. Reasoning for Savings / Balances / Money
       else if (lower.includes('saved') || lower.includes('saving') || lower.includes('balance') || lower.includes('money')) {
         const totalSavings = accountBalances['Your Mukuru Account (Joint Savings)'];
         const totalLiquid = Object.values(accountBalances).reduce((a, b) => a + b, 0);
@@ -853,7 +914,6 @@ function AskJude() {
           `• Joint Savings (Your Mukuru): R${totalSavings.toLocaleString()}\n\n` +
           `Total Combined Liquidity: R${totalLiquid.toLocaleString()}`;
       }
-      // 4. Reasoning for Spending / Category specific totals (Fuel, Coffee, Groceries, etc.)
       else if (lower.includes('spent') || lower.includes('how much on') || lower.includes('total on') || lower.includes('cost')) {
         const stopWords = ['how', 'much', 'did', 'i', 'spend', 'spent', 'on', 'the', 'a', 'total', 'cost'];
         const words = lower.replace(/[?.,]/g, '').split(' ').filter(w => w.length > 2 && !stopWords.includes(w));
@@ -873,7 +933,6 @@ function AskJude() {
           reply = `I searched your transactions for "${words.join(' ')}" but didn't find any matching expense records.`;
         }
       }
-      // 5. General Search fallback
       else {
         const matchingRecords = allTransactions.filter(r => 
           r.description && r.description.toLowerCase().split(' ').some(word => word.length > 2 && lower.includes(word))
