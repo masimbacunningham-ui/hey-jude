@@ -285,32 +285,6 @@ function Capture() {
   const [amount, setAmount] = useState('');
   const [paidFrom, setPaidFrom] = useState('Paisa Account');
 
-  const [receiptImage, setReceiptImage] = useState<string | null>(null);
-  const [isScanningReceipt, setIsScanningReceipt] = useState(false);
-  const receiptInputRef = useRef<HTMLInputElement>(null);
-
-  const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setReceiptImage(reader.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleScanReceiptWithJude = () => {
-    if (!receiptImage) return;
-    setIsScanningReceipt(true);
-    setTimeout(() => {
-      // Intelligent mock extraction simulating Jude AI reading the receipt image
-      setDescription('Hardware Store - Mahusekwa Fencing & Pipe Fittings');
-      setAmount('1450.00');
-      setCategory('Phase 3: Civil & Residential Infrastructure');
-      setCurrency('ZAR');
-      setIsScanningReceipt(false);
-    }, 1200);
-  };
-
   const [recDesc, setRecDesc] = useState('');
   const [recAmount, setRecAmount] = useState('');
   const [recAccount, setRecAccount] = useState('Paisa Account');
@@ -357,7 +331,7 @@ function Capture() {
         payload.type = type;
         payload.category = category;
         payload.amount = parseFloat(amount) || 0;
-        payload.description = description + (receiptImage ? ' [Receipt Attached]' : '');
+        payload.description = description;
         payload.paid_from = paidFrom;
       } else if (captureType === 'recurring') {
         payload.record_type = 'recurring';
@@ -398,7 +372,7 @@ function Capture() {
 
       setLoading(false);
       setSuccessMessage(`${captureType.charAt(0).toUpperCase() + captureType.slice(1)} recorded successfully!`);
-      setDescription(''); setAmount(''); setReceiptImage(null); setRecDesc(''); setRecAmount(''); setRecDueDate(''); setTransferAmount(''); setTransferDesc(''); setLoanParty(''); setLoanAmount(''); setMilestoneTitle(''); setMilestoneBudget(''); setMilestoneDate(''); setQuoteImage(null);
+      setDescription(''); setAmount(''); setRecDesc(''); setRecAmount(''); setRecDueDate(''); setTransferAmount(''); setTransferDesc(''); setLoanParty(''); setLoanAmount(''); setMilestoneTitle(''); setMilestoneBudget(''); setMilestoneDate(''); setQuoteImage(null);
       setTimeout(() => setSuccessMessage(''), 4000);
     } catch (err: any) {
       setLoading(false);
@@ -428,24 +402,6 @@ function Capture() {
               <button type="button" onClick={() => setType('expense')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${type === 'expense' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Expense</button>
               <button type="button" onClick={() => setType('income')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${type === 'income' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'}`}>Income</button>
             </div>
-
-            {/* Receipt Scan Section */}
-            <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl space-y-3">
-              <label className="block text-xs font-bold text-indigo-900 uppercase tracking-wide">📸 Attach Receipt & Scan with Jude AI</label>
-              <input type="file" accept="image/*" ref={receiptInputRef} onChange={handleReceiptChange} className="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700" />
-              {receiptImage && (
-                <div className="flex items-center justify-between pt-2">
-                  <div className="flex items-center space-x-2">
-                    <img src={receiptImage} alt="Receipt preview" className="w-12 h-12 object-cover rounded-lg border" />
-                    <span className="text-xs text-indigo-700 font-medium">Receipt attached</span>
-                  </div>
-                  <button type="button" onClick={handleScanReceiptWithJude} disabled={isScanningReceipt} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition shadow-sm disabled:opacity-50">
-                    {isScanningReceipt ? '🤖 Reading Receipt...' : '🤖 Scan with Jude AI'}
-                  </button>
-                </div>
-              )}
-            </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
