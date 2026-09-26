@@ -708,7 +708,7 @@ function ZimbabweDashboard() {
 
 function AskJude() {
   const [messages, setMessages] = useState([
-    { sender: 'jude', text: "Hello Cunningham! I'm connected to your live database. Ask me about your recurring overhead due dates, loan repayment progress, or upload a receipt photo with a note to auto-capture!" }
+    { sender: 'jude', text: "Hello Cunningham! I'm connected to your live database. Ask me about your recurring overhead due dates, loan repayment progress, or upload a receipt photo with account details to auto-capture!" }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -769,22 +769,31 @@ function AskJude() {
       let reply = "";
       const lower = userMsg.toLowerCase();
 
-      // If an image is attached, intelligently parse and auto-capture to Supabase!
+      // If an image is attached, intelligently parse amount, account, and auto-capture to Supabase!
       if (imgAttached) {
-        // Extract amount if user typed numbers (e.g., 72 or 72.00)
         const amtMatch = userMsg.match(/(\d+(\.\d+)?)/);
         const amount = amtMatch ? parseFloat(amtMatch[1]) : 0;
         const description = userMsg || "Scanned Receipt Expense";
+
+        // Smart account detection based on user prompt keywords
+        let paidFromAccount = 'Paisa Account';
+        if (lower.includes('absa')) {
+          paidFromAccount = 'Absa Account';
+        } else if (lower.includes('lynne')) {
+          paidFromAccount = "Lynne's Mukuru Account";
+        } else if (lower.includes('mukuru') || lower.includes('joint') || lower.includes('savings')) {
+          paidFromAccount = 'Your Mukuru Account (Joint Savings)';
+        }
 
         const payload = {
           household_id: 'default-household',
           record_type: 'transaction',
           type: 'expense',
-          category: lower.includes('farm') || lower.includes('fencing') || lower.includes('pipe') ? 'Phase 3: Civil & Residential Infrastructure' : 'Household',
+          category: lower.includes('farm') || lower.includes('fencing') || lower.includes('pipe') || lower.includes('fuel') ? 'Phase 3: Civil & Residential Infrastructure' : 'Household',
           amount: amount,
           currency: 'ZAR',
           description: description + ' [Receipt Scanned]',
-          paid_from: 'Paisa Account'
+          paid_from: paidFromAccount
         };
 
         const { error } = await supabase.from('transactions').insert([payload]);
@@ -792,7 +801,7 @@ function AskJude() {
         if (error) {
           reply = `❌ Failed to save receipt to database: ${error.message}`;
         } else {
-          reply = `📸 **Receipt Analyzed & Captured Successfully!**\n• **Description**: ${description}\n• **Amount**: R${amount.toLocaleString()}\n• **Account**: Paisa Account\n\nI have automatically saved this to your database and updated your account balance!`;
+          reply = `📸 **Receipt Analyzed & Captured Successfully!**\n• **Description**: ${description}\n• **Amount**: R${amount.toLocaleString()}\n• **Paid From**: ${paidFromAccount}\n\nSaved to database and balance updated!`;
         }
       } else if (lower.includes('recurring') || lower.includes('due') || lower.includes('rent') || lower.includes('overhead')) {
         const { data: records } = await supabase.from('transactions').select('*').eq('record_type', 'recurring');
@@ -863,7 +872,7 @@ function AskJude() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={isListening ? "Listening..." : "Type description & amount (e.g. Spar R72 milk & bread)..."}
+          placeholder={isListening ? "Listening..." : "Type description, amount & account (e.g. Fuel R600 Absa)..."}
           className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
         />
         <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
