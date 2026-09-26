@@ -71,6 +71,20 @@ function MoneyDashboard() {
 
   useEffect(() => { fetchRecords(); }, []);
 
+  const handleDeleteRecord = async (id: string) => {
+    if (confirm('Are you sure you want to delete this record?')) {
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      if (!error) fetchRecords();
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (confirm('Are you sure you want to clear ALL test records and start fresh? This cannot be undone.')) {
+      const { error } = await supabase.from('transactions').delete().eq('household_id', 'default-household');
+      if (!error) fetchRecords();
+    }
+  };
+
   const accountBalances: { [key: string]: number } = {
     'Paisa Account': 0,
     'Absa Account': 0,
@@ -80,6 +94,7 @@ function MoneyDashboard() {
 
   const recurringExpenses: any[] = [];
   const loansList: any[] = [];
+  const standardTransactions: any[] = [];
   const today = new Date();
 
   records.forEach((item) => {
@@ -88,14 +103,15 @@ function MoneyDashboard() {
     const dest = item.transfer_to;
 
     if (item.record_type === 'transaction') {
+      standardTransactions.push(item);
       if (item.type === 'income' && source && accountBalances[source] !== undefined) accountBalances[source] += amt;
       else if (item.type === 'expense' && source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
     } else if (item.record_type === 'transfer') {
+      standardTransactions.push(item);
       if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
       if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
     } else if (item.record_type === 'recurring') {
       recurringExpenses.push(item);
-      // ONLY deduct if due date has arrived or passed
       const dueDate = item.due_date ? new Date(item.due_date) : null;
       const isDue = !dueDate || dueDate <= today;
       if (isDue && source && accountBalances[source] !== undefined) {
@@ -113,7 +129,10 @@ function MoneyDashboard() {
           <h2 className="text-2xl font-bold text-gray-900">Money Dashboard</h2>
           <p className="text-gray-600 text-sm">Financial Period: <strong className="text-blue-600">25 Sep 2026 – 25 Oct 2026</strong></p>
         </div>
-        <button onClick={fetchRecords} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">Refresh</button>
+        <div className="flex space-x-2">
+          <button onClick={fetchRecords} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">Refresh</button>
+          <button onClick={handleClearAll} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium rounded-lg transition">Clear All Data</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -164,18 +183,12 @@ function MoneyDashboard() {
                       </div>
                       <p className="text-sm font-bold text-gray-900 mt-1">{loan.description}</p>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm font-extrabold text-gray-900">{loan.currency === 'USD' ? '$' : 'R'}{loanAmt.toLocaleString()}</span>
-                      <p className="text-xs text-gray-500">Paid from: {loan.paid_from}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-semibold text-gray-600 mb-1">
-                      <span>Repayment Status</span>
-                      <span>{progressPct}% Settled</span>
-                    </div>
-                    <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                      <div className="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }}></div>
+                    <div className="text-right flex items-center space-x-4">
+                      <div>
+                        <span className="text-sm font-extrabold text-gray-900">{loan.currency === 'USD' ? '$' : 'R'}{loanAmt.toLocaleString()}</span>
+                        <p className="text-xs text-gray-500">Paid from: {loan.paid_from}</p>
+                      </div>
+                      <button onClick={() => handleDeleteRecord(loan.id)} className="text-xs bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 px-2.5 py-1.5 rounded-lg transition">Delete</button>
                     </div>
                   </div>
                 </div>
@@ -185,7 +198,7 @@ function MoneyDashboard() {
         )}
       </div>
 
-      {/* Recurring Monthly Overheads with Due Date Status */}
+      {/* Recurring Monthly Overheads */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
           <h3 className="font-bold text-gray-900">Recurring Monthly Overheads & Due Dates</h3>
@@ -208,12 +221,46 @@ function MoneyDashboard() {
                     </div>
                     <p className="text-sm font-medium text-gray-900 mt-1">{item.description}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex items-center space-x-4">
                     <span className="text-sm font-bold text-red-600">R{parseFloat(item.amount || 0).toLocaleString()} / mo</span>
+                    <button onClick={() => handleDeleteRecord(item.id)} className="text-xs bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 px-2.5 py-1.5 rounded-lg transition">Delete</button>
                   </div>
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      {/* Recent Transactions & Transfers History */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h3 className="font-bold text-gray-900">Transaction & Transfer History</h3>
+        </div>
+        {standardTransactions.length === 0 ? (
+          <div className="p-6 text-center text-gray-500 text-sm">No transactions logged yet.</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {standardTransactions.map((item) => (
+              <div key={item.id} className="px-6 py-4 flex justify-between items-center">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-xs px-2 py-0.5 rounded font-semibold uppercase ${item.type === 'income' ? 'bg-emerald-100 text-emerald-800' : item.type === 'expense' ? 'bg-rose-100 text-rose-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                      {item.type}
+                    </span>
+                    <span className="text-xs text-gray-500">{item.category}</span>
+                  </div>
+                  <p className="text-sm font-medium text-gray-900 mt-1">{item.description}</p>
+                  <p className="text-xs text-gray-400">Account: {item.paid_from} {item.transfer_to ? `➔ ${item.transfer_to}` : ''}</p>
+                </div>
+                <div className="text-right flex items-center space-x-4">
+                  <span className={`text-sm font-bold ${item.type === 'income' ? 'text-emerald-600' : 'text-gray-900'}`}>
+                    {item.currency === 'USD' ? '$' : 'R'}{parseFloat(item.amount || 0).toLocaleString()}
+                  </span>
+                  <button onClick={() => handleDeleteRecord(item.id)} className="text-xs bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 px-2.5 py-1.5 rounded-lg transition">Delete</button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -288,7 +335,7 @@ function Capture() {
         payload.amount = parseFloat(recAmount) || 0;
         payload.description = recDesc;
         payload.paid_from = recAccount;
-        payload.due_date = recDueDate; // Storing the specific due date
+        payload.due_date = recDueDate;
       } else if (captureType === 'transfer') {
         payload.record_type = 'transfer';
         payload.type = 'transfer';
@@ -541,6 +588,13 @@ function ZimbabweDashboard() {
 
   useEffect(() => { fetchRecords(); }, []);
 
+  const handleDeleteRecord = async (id: string) => {
+    if (confirm('Are you sure you want to delete this milestone?')) {
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      if (!error) fetchRecords();
+    }
+  };
+
   const farmPhases = [
     { key: 'Phase 1: Off-Grid Utilities', phase: 'Phase 1: Off-Grid Utilities', desc: 'Solar power system setup, borehole drilling, water storage tanks, and irrigation plumbing.', color: 'bg-amber-50 text-amber-700 border-amber-200' },
     { key: 'Phase 2: Protected Agriculture', phase: 'Phase 2: Protected Agriculture', desc: 'Greenhouse construction, shade netting, drip irrigation lines, and vegetable crop cycles.', color: 'bg-blue-50 text-blue-700 border-blue-200' },
@@ -631,9 +685,12 @@ function ZimbabweDashboard() {
                   <p className="text-sm font-medium text-gray-900 mt-1">{item.description}</p>
                   {item.target_date && <p className="text-xs text-gray-500">Target Date: {item.target_date}</p>}
                 </div>
-                <div className="text-right">
-                  {item.amount > 0 && <span className="text-sm font-bold text-gray-900">R{parseFloat(item.amount).toLocaleString()} budget</span>}
-                  <p className="text-xs text-gray-400">{new Date(item.created_at).toLocaleDateString()}</p>
+                <div className="text-right flex items-center space-x-4">
+                  <div>
+                    {item.amount > 0 && <span className="text-sm font-bold text-gray-900">R{parseFloat(item.amount).toLocaleString()} budget</span>}
+                    <p className="text-xs text-gray-400">{new Date(item.created_at).toLocaleDateString()}</p>
+                  </div>
+                  <button onClick={() => handleDeleteRecord(item.id)} className="text-xs bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 px-2.5 py-1.5 rounded-lg transition">Delete</button>
                 </div>
               </div>
             ))}
