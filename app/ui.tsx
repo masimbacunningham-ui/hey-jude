@@ -708,7 +708,7 @@ function ZimbabweDashboard() {
 
 function AskJude() {
   const [messages, setMessages] = useState([
-    { sender: 'jude', text: "Hello Cunningham! I'm connected to your live database. Ask me about your recurring overhead due dates, or type a transaction/upload a receipt to auto-capture!" }
+    { sender: 'jude', text: "Hello Cunningham! I'm connected to your live database with advanced reasoning. Ask me how much you spent on fuel, check your savings balances, or type a transaction to auto-capture!" }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -766,28 +766,53 @@ function AskJude() {
     setLoading(true);
 
     try {
+      const { data: records, error } = await supabase.from('transactions').select('*');
+      
+      let accountBalances: { [key: string]: number } = {
+        'Paisa Account': 0,
+        'Absa Account': 0,
+        "Lynne's Mukuru Account": 0,
+        'Your Mukuru Account (Joint Savings)': 0,
+      };
+
+      let allTransactions: any[] = [];
+      let recurringItems: any[] = [];
+
+      if (!error && records) {
+        allTransactions = records;
+        records.forEach((item) => {
+          const amt = parseFloat(item.amount) || 0;
+          const source = item.paid_from;
+          const dest = item.transfer_to;
+
+          if (item.record_type === 'transaction') {
+            if (item.type === 'income' && source && accountBalances[source] !== undefined) accountBalances[source] += amt;
+            else if (item.type === 'expense' && source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+          } else if (item.record_type === 'transfer') {
+            if (source && accountBalances[source] !== undefined) accountBalances[source] -= amt;
+            if (dest && accountBalances[dest] !== undefined) accountBalances[dest] += amt;
+          } else if (item.record_type === 'recurring') {
+            recurringItems.push(item);
+          }
+        });
+      }
+
       let reply = "";
       const lower = userMsg.toLowerCase();
-
-      // Check if message is a query or command
-      const isQuery = lower.includes('recurring') || lower.includes('due') || lower.includes('rent') || lower.includes('overhead') || lower.includes('find') || lower.includes('show');
       const amtMatch = userMsg.match(/(\d+(\.\d+)?)/);
       const hasAmount = amtMatch !== null;
+      
+      const isQuery = lower.includes('how much') || lower.includes('what') || lower.includes('show') || lower.includes('find') || lower.includes('balance') || lower.includes('saved') || lower.includes('total') || lower.includes('recurring') || lower.includes('spent') || lower.includes('cost');
 
-      // Auto-capture if image is attached OR if text contains an amount and isn't just a general query
+      // 1. Auto-Capture if image attached OR if user typed an amount without asking a query
       if (imgAttached || (hasAmount && !isQuery)) {
         const amount = amtMatch ? parseFloat(amtMatch[1]) : 0;
         const description = userMsg || "Scanned Receipt Expense";
 
-        // Smart account detection based on user prompt keywords
         let paidFromAccount = 'Paisa Account';
-        if (lower.includes('absa')) {
-          paidFromAccount = 'Absa Account';
-        } else if (lower.includes('lynne')) {
-          paidFromAccount = "Lynne's Mukuru Account";
-        } else if (lower.includes('mukuru') || lower.includes('joint') || lower.includes('savings')) {
-          paidFromAccount = 'Your Mukuru Account (Joint Savings)';
-        }
+        if (lower.includes('absa')) paidFromAccount = 'Absa Account';
+        else if (lower.includes('lynne')) paidFromAccount = "Lynne's Mukuru Account";
+        else if (lower.includes('mukuru') || lower.includes('joint') || lower.includes('savings')) paidFromAccount = 'Your Mukuru Account (Joint Savings)';
 
         const payload = {
           household_id: 'default-household',
@@ -800,38 +825,71 @@ function AskJude() {
           paid_from: paidFromAccount
         };
 
-        const { error } = await supabase.from('transactions').insert([payload]);
+        const { error: insErr } = await supabase.from('transactions').insert([payload]);
+        if (insErr) {
+          reply = `Failed to save transaction: ${insErr.message}`;
+        } else {
+          reply = `Transaction Captured Successfully!\n• Description: ${description}\n• Amount: R${amount.toLocaleString()}\n• Paid From: ${paidFromAccount}\n\nSaved to database and balance updated!`;
+        }
+      } 
+      // 2. Reasoning for Recurring / Overheads
+      else if (lower.includes('recurring') || lower.includes('overhead')) {
+        if (recurringItems.length > 0) {
+          const totalMonthly = recurringItems.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+          const details = recurringItems.map(r => `• ${r.description}: R${parseFloat(r.amount).toLocaleString()} (Due: ${r.due_date || 'Not set'})`).join('\n');
+          reply = `Recurring Overheads & Due Dates:\n${details}\n\nTotal Monthly Recurring Cost: R${totalMonthly.toLocaleString()}`;
+        } else {
+          reply = `No recurring overheads logged yet.`;
+        }
+      }
+      // 3. Reasoning for Savings / Balances / Money
+      else if (lower.includes('saved') || lower.includes('saving') || lower.includes('balance') || lower.includes('money')) {
+        const totalSavings = accountBalances['Your Mukuru Account (Joint Savings)'];
+        const totalLiquid = Object.values(accountBalances).reduce((a, b) => a + b, 0);
+        reply = `Account Balances & Savings Summary:\n` +
+          `• Paisa Account: R${accountBalances['Paisa Account'].toLocaleString()}\n` +
+          `• Absa Account: R${accountBalances['Absa Account'].toLocaleString()}\n` +
+          `• Lynne's Mukuru Account: R${accountBalances["Lynne's Mukuru Account"].toLocaleString()}\n` +
+          `• Joint Savings (Your Mukuru): R${totalSavings.toLocaleString()}\n\n` +
+          `Total Combined Liquidity: R${totalLiquid.toLocaleString()}`;
+      }
+      // 4. Reasoning for Spending / Category specific totals (Fuel, Coffee, Groceries, etc.)
+      else if (lower.includes('spent') || lower.includes('how much on') || lower.includes('total on') || lower.includes('cost')) {
+        const stopWords = ['how', 'much', 'did', 'i', 'spend', 'spent', 'on', 'the', 'a', 'total', 'cost'];
+        const words = lower.replace(/[?.,]/g, '').split(' ').filter(w => w.length > 2 && !stopWords.includes(w));
         
-        if (error) {
-          reply = `❌ Failed to save transaction to database: ${error.message}`;
+        const matching = allTransactions.filter(t => {
+          if (t.record_type !== 'transaction' || t.type !== 'expense') return false;
+          const desc = (t.description || '').toLowerCase();
+          const cat = (t.category || '').toLowerCase();
+          return words.some(w => desc.includes(w) || cat.includes(w));
+        });
+
+        if (matching.length > 0) {
+          const sum = matching.reduce((acc, t) => acc + (parseFloat(t.amount) || 0), 0);
+          const list = matching.map(t => `• ${t.description}: R${parseFloat(t.amount || 0).toLocaleString()} (${t.paid_from})`).join('\n');
+          reply = `Here is what you've spent matching your query (Total: R${sum.toLocaleString()}):\n${list}`;
         } else {
-          reply = `✅ **Transaction Captured Successfully!**\n• **Description**: ${description}\n• **Amount**: R${amount.toLocaleString()}\n• **Paid From**: ${paidFromAccount}\n\nSaved to database and balance updated!`;
+          reply = `I searched your transactions for "${words.join(' ')}" but didn't find any matching expense records.`;
         }
-      } else if (isQuery && (lower.includes('recurring') || lower.includes('due') || lower.includes('rent') || lower.includes('overhead'))) {
-        const { data: records } = await supabase.from('transactions').select('*').eq('record_type', 'recurring');
-        if (records && records.length > 0) {
-          const details = records.map(r => `• **${r.description}**: R${parseFloat(r.amount).toLocaleString()} (Due: ${r.due_date || 'Not set'})`).join('\n');
-          reply = `📋 **Recurring Overheads & Due Dates:**\n${details}`;
-        } else {
-          reply = `📋 No recurring overheads logged yet.`;
-        }
-      } else {
-        const { data: records } = await supabase.from('transactions').select('*');
-        const matchingRecords = (records || []).filter(r => 
+      }
+      // 5. General Search fallback
+      else {
+        const matchingRecords = allTransactions.filter(r => 
           r.description && r.description.toLowerCase().split(' ').some(word => word.length > 2 && lower.includes(word))
         );
 
         if (matchingRecords.length > 0) {
-          const details = matchingRecords.map(r => `• **${r.description}**: R${parseFloat(r.amount || 0).toLocaleString()} (${r.record_type || r.type})`).join('\n');
-          reply = `🔍 I found these matching records:\n${details}`;
+          const details = matchingRecords.map(r => `• ${r.description}: R${parseFloat(r.amount || 0).toLocaleString()} (${r.record_type || r.type})`).join('\n');
+          reply = `I found these matching records:\n${details}`;
         } else {
-          reply = `I'm tracking your recurring due dates, account balances, and Mahusekwa farm budgets. Type an expense with an amount (e.g. "Fuel R500 Absa") or upload a receipt to auto-capture!`;
+          reply = `I'm tracking your accounts, recurring due dates, and transactions. You can ask me how much you spent on fuel, check your savings balances, or type an expense to auto-capture!`;
         }
       }
 
       setMessages(prev => [...prev, { sender: 'jude', text: reply }]);
     } catch (err) {
-      setMessages(prev => [...prev, { sender: 'jude', text: "I had trouble checking your database records." }]);
+      setMessages(prev => [...prev, { sender: 'jude', text: "I had trouble analyzing your database records." }]);
     } finally {
       setLoading(false);
     }
@@ -854,7 +912,7 @@ function AskJude() {
           </div>
         ))}
         {loading && (
-          <div className="flex justify-start"><div className="bg-gray-100 text-gray-500 p-3 rounded-2xl text-sm animate-pulse">Jude is analyzing and saving transaction...</div></div>
+          <div className="flex justify-start"><div className="bg-gray-100 text-gray-500 p-3 rounded-2xl text-sm animate-pulse">Jude is reasoning and analyzing records...</div></div>
         )}
       </div>
 
@@ -876,7 +934,7 @@ function AskJude() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={isListening ? "Listening..." : "Type description, amount & account (e.g. Fuel R500 Absa)..."}
+          placeholder={isListening ? "Listening..." : "Ask questions or type expenses (e.g. How much on fuel?)..."}
           className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-gray-900 text-sm"
         />
         <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition text-sm shadow-sm">Send</button>
