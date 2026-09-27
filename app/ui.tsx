@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -71,7 +70,7 @@ export default function AppShell() {
       setMilestoneStatus('Planned');
       setTargetPhase('Phase 3: Residential & Utilities Setup');
       setDescription('Roofing Materials & Labour (Roof A & B Consolidated)');
-      setScanMessage('Successfully extracted quotation total: $1,583.75 USD (Saved as Planned Milestone)');
+      setScanMessage('Successfully extracted quotation total: $1,583.75 USD');
     }, 1200);
   };
 
@@ -83,7 +82,7 @@ export default function AppShell() {
     }
 
     const formattedDescription = recordType === 'milestone' 
-      ? `[Milestone: ${milestoneStatus} | Target: ${targetDate} | Funded: $0] ${description}`
+      ? `[Milestone: ${milestoneStatus} | Target: ${targetDate} | FundedUSD: 0] ${description}`
       : description;
 
     const payload = {
@@ -102,7 +101,7 @@ export default function AppShell() {
     const { error } = await supabase.from('transactions').insert([payload]);
 
     if (!error) {
-      alert('Successfully recorded milestone quotation!');
+      alert('Successfully recorded quotation milestone!');
       setAmount('');
       setDescription('');
       setCounterparty('');
@@ -313,10 +312,23 @@ export default function AppShell() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {phasesConfig.map((phase) => {
                   const phaseMilestones = milestonesList.filter(m => m.category === phase.name);
+                  
                   const totalPhaseBudget = phaseMilestones.reduce((sum, m) => sum + (parseFloat(m.amount) || 0), 0);
+                  
+                  // Extract funded USD from description tag [FundedUSD: X]
+                  const totalPhaseFunded = phaseMilestones.reduce((sum, m) => {
+                    const match = m.description?.match(/FundedUSD:\s*([\d.]+)/);
+                    return sum + (match ? parseFloat(match[1]) : 0);
+                  }, 0);
+
+                  const phaseProgressPct = totalPhaseBudget > 0 ? Math.min(100, Math.round((totalPhaseFunded / totalPhaseBudget) * 100)) : 0;
 
                   const handleFundMilestone = async (milestone: any) => {
-                    const payUsdStr = prompt(`Enter USD amount to fund/pay towards "${milestone.description}":`, milestone.amount);
+                    const match = milestone.description?.match(/FundedUSD:\s*([\d.]+)/);
+                    const currentFunded = match ? parseFloat(match[1]) : 0;
+                    const remainingUsd = Math.max(0, parseFloat(milestone.amount) - currentFunded);
+
+                    const payUsdStr = prompt(`Enter USD amount to fund/pay towards "${milestone.description}":`, remainingUsd.toString());
                     if (!payUsdStr) return;
                     const payUsd = parseFloat(payUsdStr);
                     if (isNaN(payUsd) || payUsd <= 0) return;
@@ -329,7 +341,7 @@ export default function AppShell() {
                     if (!feeStr) return;
                     const fee = parseFloat(feeStr);
 
-                    const accountChoice = prompt("Select payment account:\n1. Mukuru Account (Joint Savings)\n2. Paisa Account\n3. Absa Account\n4. Lynne's Mukuru Account", "1");
+                    const accountChoice = prompt("Select payment account:\n1. Your Mukuru Account (Joint Savings)\n2. Paisa Account\n3. Absa Account\n4. Lynne's Mukuru Account", "1");
                     if (!accountChoice) return;
 
                     let selectedAccount = "Your Mukuru Account (Joint Savings)";
@@ -338,8 +350,16 @@ export default function AppShell() {
                     else if (accountChoice === "4" || accountChoice.toLowerCase().includes("lynne")) selectedAccount = "Lynne's Mukuru Account";
 
                     const totalZarCost = (payUsd * rate) + fee;
+                    const newFundedUsd = currentFunded + payUsd;
 
-                    // Log the cash outflow transaction in ZAR against the account
+                    // Update milestone description with new FundedUSD tracker
+                    const baseDesc = milestone.description.replace(/\[Milestone:.*?\]\s*/, '').replace(/\[FundedUSD:.*?\]\s*/, '');
+                    const newStatus = newFundedUsd >= parseFloat(milestone.amount) ? 'Completed' : 'In Progress';
+                    const updatedDesc = `[Milestone: ${newStatus} | FundedUSD: ${newFundedUsd}] ${baseDesc}`;
+
+                    await supabase.from('transactions').update({ description: updatedDesc }).eq('id', milestone.id);
+
+                    // Log the ZAR cash outflow transaction against the bank account
                     await supabase.from('transactions').insert([{
                       household_id: 'default-household',
                       record_type: 'transaction',
@@ -347,7 +367,7 @@ export default function AppShell() {
                       category: phase.name,
                       amount: totalZarCost,
                       currency: 'ZAR',
-                      description: `Funded Zim Milestone ($${payUsd} USD @ ${rate} + R${fee} fee): ${milestone.description}`,
+                      description: `Funded Zim Milestone ($${payUsd} USD @ ${rate} + R${fee} fee): ${baseDesc}`,
                       paid_from: selectedAccount
                     }]);
 
@@ -360,7 +380,7 @@ export default function AppShell() {
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase {phase.num}</span>
-                          <span className="text-xs text-gray-500 font-medium">{phaseMilestones.length} quotations/milestones</span>
+                          <span className="text-xs text-gray-500 font-medium">{phaseMilestones.length} quotations</span>
                         </div>
                         <h4 className="font-bold text-gray-900 text-sm">{phase.name}</h4>
                         <p className="text-xs text-gray-600">{phase.desc}</p>
@@ -368,28 +388,44 @@ export default function AppShell() {
                         {phaseMilestones.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-gray-200/60 space-y-2">
                             <p className="text-[11px] font-bold text-gray-700 uppercase">Quotations / Milestones:</p>
-                            {phaseMilestones.map(m => (
-                              <div key={m.id} className="text-xs bg-white p-3 rounded-xl border border-gray-200 space-y-2">
-                                <div className="flex justify-between items-start">
-                                  <span className="font-semibold text-gray-900">{m.description}</span>
-                                  <span className="font-bold text-blue-600">${parseFloat(m.amount).toLocaleString()} USD</span>
+                            {phaseMilestones.map(m => {
+                              const match = m.description?.match(/FundedUSD:\s*([\d.]+)/);
+                              const funded = match ? parseFloat(match[1]) : 0;
+                              const total = parseFloat(m.amount) || 0;
+                              const isComplete = funded >= total && total > 0;
+                              const cleanDesc = m.description.replace(/\[Milestone:.*?\]\s*/, '').replace(/\[FundedUSD:.*?\]\s*/, '');
+
+                              return (
+                                <div key={m.id} className="text-xs bg-white p-3 rounded-xl border border-gray-200 space-y-2">
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <span className="font-semibold text-gray-900 block">{cleanDesc}</span>
+                                      <span className="text-[10px] text-emerald-600 font-bold">Funded: ${funded.toLocaleString()} /${total.toLocaleString()} USD</span>
+                                    </div>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${isComplete ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                      {isComplete ? 'Paid' : 'Planned'}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center pt-1 border-t border-gray-100">
+                                    <button onClick={() => handleFundMilestone(m)} className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-semibold rounded-lg hover:bg-emerald-100 transition">
+                                      + Fund / Pay via Mukuru
+                                    </button>
+                                    <button onClick={() => handleDeleteRecord(m.id)} className="text-[10px] text-red-500 hover:underline">Delete</button>
+                                  </div>
                                 </div>
-                                <div className="flex justify-between items-center pt-1 border-t border-gray-100">
-                                  <button onClick={() => handleFundMilestone(m)} className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-semibold rounded-lg hover:bg-emerald-100 transition">
-                                    + Fund / Pay via Mukuru
-                                  </button>
-                                  <button onClick={() => handleDeleteRecord(m.id)} className="text-[10px] text-red-500 hover:underline">Delete</button>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>
 
-                      <div className="pt-2 border-t border-gray-200/60">
+                      <div className="pt-3 border-t border-gray-200/60 space-y-1.5">
                         <div className="flex justify-between text-xs font-semibold text-gray-600">
-                          <span>Quotation Budget Total</span>
-                          <span className="text-blue-600 font-bold">${totalPhaseBudget.toLocaleString()} USD</span>
+                          <span>Progress ({phaseProgress}% Funded)</span>
+                          <span className="text-blue-600 font-bold">${totalPhaseFunded.toLocaleString()} /${totalPhaseBudget.toLocaleString()} USD</span>
+                        </div>
+                        <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
+                          <div className="bg-blue-600 h-3 rounded-full transition-all duration-500" style={{ width: `${phaseProgressPct}%` }}></div>
                         </div>
                       </div>
                     </div>
