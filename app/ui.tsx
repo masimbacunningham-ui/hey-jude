@@ -12,18 +12,8 @@ export default function AppShell() {
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Phase Progress State for Milestone Tracking
-  const [phaseProgress, setPhaseProgress] = useState<{ [key: number]: number }>({
-    1: 100, // Phase 1: Site Acquisition & Survey
-    2: 75,  // Phase 2: Perimeter & Security Infrastructure
-    3: 45,  // Phase 3: Residential & Utilities Setup
-    4: 15,  // Phase 4: Greenhouse Tunnels & Horticulture
-    5: 0,   // Phase 5: Poultry & Broiler Units
-    6: 0    // Phase 6: Piggery & Integrated Swine Production
-  });
-
   // Capture Form State
-  const [recordType, setRecordType] = useState<'transaction' | 'loan'>('transaction');
+  const [recordType, setRecordType] = useState<'transaction' | 'loan' | 'milestone'>('transaction');
   const [type, setType] = useState<'expense' | 'income'>('expense');
   const [category, setCategory] = useState('Household');
   const [amount, setAmount] = useState('');
@@ -32,6 +22,11 @@ export default function AppShell() {
   const [paidFrom, setPaidFrom] = useState('Paisa Account');
   const [loanType, setLoanType] = useState<'borrowed' | 'lent'>('borrowed');
   const [counterparty, setCounterparty] = useState('');
+
+  // Milestone specific capture state
+  const [targetPhase, setTargetPhase] = useState('Phase 1: Site Acquisition & Survey');
+  const [targetDate, setTargetDate] = useState('');
+  const [milestoneStatus, setMilestoneStatus] = useState('In Progress');
 
   // Ask Jude State
   const [askInput, setAskInput] = useState('');
@@ -67,13 +62,15 @@ export default function AppShell() {
       household_id: 'default-household',
       record_type: recordType,
       type: recordType === 'loan' ? (loanType === 'borrowed' ? 'income' : 'expense') : type,
-      category: recordType === 'loan' ? 'Loan' : category,
+      category: recordType === 'milestone' ? targetPhase : (recordType === 'loan' ? 'Loan' : category),
       amount: parseFloat(amount),
       currency: currency,
       description: description,
       paid_from: paidFrom,
       counterparty: recordType === 'loan' ? counterparty : null,
-      repaid_amount: recordType === 'loan' ? 0 : null
+      repaid_amount: recordType === 'loan' ? 0 : null,
+      target_date: recordType === 'milestone' ? targetDate : null,
+      status: recordType === 'milestone' ? milestoneStatus : null
     };
 
     const { error } = await supabase.from('transactions').insert([payload]);
@@ -83,6 +80,7 @@ export default function AppShell() {
       setAmount('');
       setDescription('');
       setCounterparty('');
+      setTargetDate('');
       fetchRecords();
       setActiveTab('dashboard');
     } else {
@@ -123,7 +121,7 @@ export default function AppShell() {
       responseText = `Your total recorded coffee spend is R${totalCoffee.toLocaleString()}.`;
     } else if (lower.includes('farm') || lower.includes('mahusekwa')) {
       const farmSpend = records
-        .filter(r => r.category?.toLowerCase().includes('infrastructure') || r.description?.toLowerCase().includes('farm'))
+        .filter(r => r.category?.toLowerCase().includes('phase') || r.description?.toLowerCase().includes('farm'))
         .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
       responseText = `Total capital allocated toward the Mahusekwa farm development is R${farmSpend.toLocaleString()}.`;
     } else {
@@ -133,19 +131,9 @@ export default function AppShell() {
     setChatLog((prev) => [...prev, { sender: 'jude', text: responseText }]);
   };
 
-  const updatePhaseProgress = (phaseNum: number) => {
-    const val = prompt(`Enter progress percentage for Phase ${phaseNum} (0 to 100):`, phaseProgress[phaseNum].toString());
-    if (val === null) return;
-    const num = parseInt(val);
-    if (!isNaN(num) && num >= 0 && num <= 100) {
-      setPhaseProgress(prev => ({ ...prev, [phaseNum]: num }));
-    } else {
-      alert("Please enter a valid number between 0 and 100.");
-    }
-  };
-
   const loansList = records.filter(r => r.record_type === 'loan');
-  const transactionsList = records.filter(r => r.record_type === 'transaction');
+  const milestonesList = records.filter(r => r.record_type === 'milestone');
+  const transactionsList = records.filter(r => r.record_type === 'transaction' || !r.record_type);
 
   const totalExpenses = transactionsList
     .filter(r => r.type === 'expense')
@@ -155,8 +143,8 @@ export default function AppShell() {
     .filter(r => r.type === 'income')
     .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
-  const farmOverhead = transactionsList
-    .filter(r => r.category?.includes('Infrastructure') || r.category?.includes('Farm'))
+  const farmOverhead = records
+    .filter(r => r.category?.includes('Phase') || r.description?.toLowerCase().includes('farm'))
     .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
   const householdLiving = transactionsList
@@ -173,6 +161,15 @@ export default function AppShell() {
     }, 0);
     return { name: accName, balance };
   });
+
+  const phasesConfig = [
+    { num: 1, name: "Phase 1: Site Acquisition & Survey", desc: "Plot demarcations, initial land clearing, and title verification on 5,000 sqm greenfield plot." },
+    { num: 2, name: "Phase 2: Perimeter & Security Infrastructure", desc: "Boundary fencing, secure gate installation, and vehicle access pathway development." },
+    { num: 3, name: "Phase 3: Residential & Utilities Setup", desc: "Two-bedroom residential building roofing and interior finishes, borehole water system, and solar power setup." },
+    { num: 4, name: "Phase 4: Greenhouse Tunnels & Horticulture", desc: "Protected greenhouse tunnel construction, drip irrigation systems, and commercial crop plantation." },
+    { num: 5, name: "Phase 5: Poultry & Broiler Units", desc: "Construction of broiler chicken housing, feeding systems, and bio-security protocols." },
+    { num: 6, name: "Phase 6: Piggery & Integrated Swine Production", desc: "Swine production pens, waste management integration, and full commercial scaling under farm management." }
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans text-gray-900">
@@ -253,7 +250,7 @@ export default function AppShell() {
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-gray-900 mb-1">Mahusekwa Farm Project</h3>
-                <p className="text-xs text-gray-500 mb-4">Review agricultural capital allocations, the 6 development phases, and milestone tracking bars.</p>
+                <p className="text-xs text-gray-500 mb-4">Review agricultural capital allocations, the 6 development phases, and milestone tracking.</p>
                 <button onClick={() => setActiveTab('zimbabwe')} className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-3.5 py-2 rounded-xl hover:bg-emerald-100 transition">View Zim Farm →</button>
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -456,7 +453,7 @@ export default function AppShell() {
           </div>
         )}
 
-        {/* MAHUSEKWA / ZIMBABWE TAB (Full 6 Phases & Milestone Progress Tracking) */}
+        {/* MAHUSEKWA / ZIMBABWE TAB (Milestone-driven progress based on captured records) */}
         {activeTab === 'zimbabwe' && (
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
@@ -468,45 +465,60 @@ export default function AppShell() {
               </div>
               
               <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Project Phases & Milestone Progress Tracker</h3>
-                  <span className="text-xs text-gray-500">Click "Update %" on any phase to adjust milestone completion</span>
-                </div>
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Project Phases & Milestone Tracker (Driven by Captured Milestones & Expenses)</h3>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[
-                    { num: 1, title: "Site Acquisition & Survey", desc: "Plot demarcations, initial land clearing, and title verification on 5,000 sqm greenfield plot." },
-                    { num: 2, title: "Perimeter & Security Infrastructure", desc: "Boundary fencing, secure gate installation, and vehicle access pathway development." },
-                    { num: 3, title: "Residential & Utilities Setup", desc: "Two-bedroom residential building roofing and interior finishes, borehole water system, and solar power setup." },
-                    { num: 4, title: "Greenhouse Tunnels & Horticulture", desc: "Protected greenhouse tunnel construction, drip irrigation systems, and commercial crop plantation." },
-                    { num: 5, title: "Poultry & Broiler Units", desc: "Construction of broiler chicken housing, feeding systems, and bio-security protocols." },
-                    { num: 6, title: "Piggery & Integrated Swine Production", desc: "Swine production pens, waste management integration, and full commercial scaling under farm management." }
-                  ].map((phase) => {
-                    const p = phaseProgress[phase.num];
+                  {phasesConfig.map((phase) => {
+                    // Calculate progress based on milestones or allocated funds logged under this phase
+                    const phaseMilestones = milestonesList.filter(m => m.category === phase.name);
+                    const phaseExpenses = records.filter(r => r.category === phase.name || r.description?.toLowerCase().includes(`phase ${phase.num}`));
+                    
+                    const totalPhaseFunding = phaseExpenses.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+                    const milestoneCount = phaseMilestones.length;
+                    
+                    // Dynamic calculation: if milestones exist, compute based on completed vs total, or scale by funding
+                    const calculatedProgress = milestoneCount > 0 
+                      ? Math.round((phaseMilestones.filter(m => m.status === 'Completed' || m.status?.toLowerCase().includes('done')).length / milestoneCount) * 100)
+                      : (totalPhaseFunding > 0 ? Math.min(100, Math.round((totalPhaseFunding / 10000) * 100)) : (phase.num === 1 ? 100 : 0));
+
                     return (
                       <div key={phase.num} className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-4 flex flex-col justify-between">
                         <div className="space-y-2">
                           <div className="flex justify-between items-center">
                             <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase {phase.num}</span>
-                            <button 
-                              onClick={() => updatePhaseProgress(phase.num)}
-                              className="text-xs bg-white hover:bg-gray-100 text-blue-600 font-semibold px-2.5 py-1 rounded-lg border border-gray-200 transition shadow-sm"
-                            >
-                              Update %
-                            </button>
+                            <span className="text-xs text-gray-500 font-medium">{milestoneCount} milestones logged</span>
                           </div>
-                          <h4 className="font-bold text-gray-900 text-sm">{phase.title}</h4>
+                          <h4 className="font-bold text-gray-900 text-sm">{phase.name}</h4>
                           <p className="text-xs text-gray-600">{phase.desc}</p>
+                          
+                          {/* List of captured milestones for this phase */}
+                          {phaseMilestones.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-gray-200/60 space-y-1.5">
+                              <p className="text-[11px] font-bold text-gray-700 uppercase">Logged Milestones:</p>
+                              {phaseMilestones.map(m => (
+                                <div key={m.id} className="text-xs flex justify-between items-center bg-white p-2 rounded-lg border border-gray-200">
+                                  <div>
+                                    <span className="font-medium text-gray-900">{m.description}</span>
+                                    {m.target_date && <span className="block text-[10px] text-gray-400">Target: {m.target_date}</span>}
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="font-bold text-emerald-600">R{parseFloat(m.amount).toLocaleString()}</span>
+                                    <button onClick={() => handleDeleteRecord(m.id)} className="block text-[10px] text-red-500 hover:underline">Delete</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         {/* Milestone Progress Bar */}
                         <div className="space-y-1.5 pt-2 border-t border-gray-200/60">
                           <div className="flex justify-between text-xs font-semibold text-gray-600">
-                            <span>Milestone Progress</span>
-                            <span className="text-blue-600 font-bold">{p}% Completed</span>
+                            <span>Progress ({totalPhaseFunding > 0 ? `R${totalPhaseFunding.toLocaleString()} allocated` : 'No funds allocated'})</span>
+                            <span className="text-blue-600 font-bold">{calculatedProgress}%</span>
                           </div>
                           <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
-                            <div className="bg-blue-600 h-3 rounded-full transition-all duration-500" style={{ width: `${p}%` }}></div>
+                            <div className="bg-blue-600 h-3 rounded-full transition-all duration-500" style={{ width: `${calculatedProgress}%` }}></div>
                           </div>
                         </div>
                       </div>
@@ -518,10 +530,10 @@ export default function AppShell() {
           </div>
         )}
 
-        {/* CAPTURE TAB */}
+        {/* CAPTURE TAB (With Milestone & Target Date Support) */}
         {activeTab === 'capture' && (
           <div className="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Capture New Financial Entry</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Capture New Financial Entry or Milestone</h2>
             <form onSubmit={handleCreateRecord} className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -529,9 +541,10 @@ export default function AppShell() {
                   <select value={recordType} onChange={(e) => setRecordType(e.target.value as any)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white">
                     <option value="transaction">Transaction (Expense/Income)</option>
                     <option value="loan">Loan / Borrowing</option>
+                    <option value="milestone">Mahusekwa Milestone</option>
                   </select>
                 </div>
-                {recordType === 'transaction' ? (
+                {recordType === 'transaction' && (
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Flow Type</label>
                     <select value={type} onChange={(e) => setType(e.target.value as any)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white">
@@ -539,12 +552,23 @@ export default function AppShell() {
                       <option value="income">Income</option>
                     </select>
                   </div>
-                ) : (
+                )}
+                {recordType === 'loan' && (
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Loan Direction</label>
                     <select value={loanType} onChange={(e) => setLoanType(e.target.value as any)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white">
                       <option value="borrowed">Borrowed Funds</option>
                       <option value="lent">Lent Out</option>
+                    </select>
+                  </div>
+                )}
+                {recordType === 'milestone' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Target Phase</label>
+                    <select value={targetPhase} onChange={(e) => setTargetPhase(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white">
+                      {phasesConfig.map(p => (
+                        <option key={p.num} value={p.name}>{p.name}</option>
+                      ))}
                     </select>
                   </div>
                 )}
@@ -555,7 +579,6 @@ export default function AppShell() {
                   <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Category</label>
                   <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white">
                     <option value="Household">Household Living</option>
-                    <option value="Phase 3: Civil & Residential Infrastructure">Mahusekwa Farm Dev (Phase 3)</option>
                     <option value="Groceries">Groceries</option>
                     <option value="Transport">Transport & Fuel</option>
                     <option value="Overheads">Recurring Overheads</option>
@@ -571,9 +594,26 @@ export default function AppShell() {
                 </div>
               )}
 
+              {recordType === 'milestone' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Target Date</label>
+                    <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Status</label>
+                    <select value={milestoneStatus} onChange={(e) => setMilestoneStatus(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white">
+                      <option value="In Progress">In Progress</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Planned">Planned</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Amount</label>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">{recordType === 'milestone' ? 'Milestone Budget / Allocated Cost' : 'Amount'}</label>
                   <input type="number" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm" required />
                 </div>
                 <div>
@@ -587,8 +627,8 @@ export default function AppShell() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Description</label>
-                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Fencing wire and borehole pipes" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm" required />
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">{recordType === 'milestone' ? 'Milestone Title / Description' : 'Description'}</label>
+                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={recordType === 'milestone' ? "e.g. Borehole drilling & casing" : "e.g. Fencing wire and pipes"} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm" required />
               </div>
 
               <div>
