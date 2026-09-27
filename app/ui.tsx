@@ -123,6 +123,7 @@ export default function AppShell() {
     }
   };
 
+  // Enhanced Ask Jude AI Natural Language Processor with Smart Loan Repayment Logic
   const handleAskJude = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!askInput.trim()) return;
@@ -137,7 +138,59 @@ export default function AppShell() {
     const amountMatch = userQuery.match(/(?:r|zar|\$|€)?\s*(\d+(?:\.\d+)?)/i);
     const extractedAmount = amountMatch ? parseFloat(amountMatch[1]) : 0;
 
-    if (lower.includes('coffee') || lower.includes('bought') || lower.includes('spent') || lower.includes('paid')) {
+    // Detect Account from query if mentioned
+    let detectedAccount = 'Paisa Account';
+    if (lower.includes('absa')) detectedAccount = 'Absa Account';
+    else if (lower.includes('joint') || lower.includes('mukuru joint')) detectedAccount = 'Your Mukuru Account (Joint Savings)';
+    else if (lower.includes('lynne')) detectedAccount = "Lynne's Mukuru Account";
+
+    if (lower.includes('loan') && (lower.includes('paid') || lower.includes('repay') || lower.includes('pay'))) {
+      if (extractedAmount > 0) {
+        // Find matching loan by counterparty in user query
+        const loansList = records.filter(r => r.record_type === 'loan');
+        const matchedLoan = loansList.find(l => l.counterparty?.toLowerCase() && lower.includes(l.counterparty.toLowerCase()));
+
+        if (matchedLoan) {
+          const currentRepaid = parseFloat(matchedLoan.repaid_amount) || 0;
+          const newRepaidTotal = currentRepaid + extractedAmount;
+
+          await supabase
+            .from('transactions')
+            .update({ repaid_amount: newRepaidTotal })
+            .eq('id', matchedLoan.id);
+
+          await supabase.from('transactions').insert([{
+            household_id: 'default-household',
+            record_type: 'transaction',
+            type: 'expense',
+            category: 'Loan Repayment',
+            amount: extractedAmount,
+            currency: 'ZAR',
+            description: `Loan Repayment to ${matchedLoan.counterparty}`,
+            paid_from: detectedAccount
+          }]);
+
+          fetchRecords();
+          responseText = `Successfully logged R${extractedAmount.toLocaleString()} loan repayment for ${matchedLoan.counterparty} from ${detectedAccount}! Updated loan progress.`;
+        } else {
+          // If no specific counterparty match, log as general loan repayment transaction
+          await supabase.from('transactions').insert([{
+            household_id: 'default-household',
+            record_type: 'transaction',
+            type: 'expense',
+            category: 'Loan Repayment',
+            amount: extractedAmount,
+            currency: 'ZAR',
+            description: `General Loan Repayment (${userQuery})`,
+            paid_from: detectedAccount
+          }]);
+          fetchRecords();
+          responseText = `Logged R${extractedAmount.toLocaleString()} as a loan repayment outflow from ${detectedAccount}!`;
+        }
+      } else {
+        responseText = `Please specify the amount for the loan repayment (e.g., "paid loan Lesy R520").`;
+      }
+    } else if (lower.includes('coffee') || lower.includes('bought') || lower.includes('spent') || lower.includes('paid')) {
       if (extractedAmount > 0) {
         await supabase.from('transactions').insert([{
           household_id: 'default-household',
@@ -147,10 +200,10 @@ export default function AppShell() {
           amount: extractedAmount,
           currency: 'ZAR',
           description: userQuery,
-          paid_from: 'Paisa Account'
+          paid_from: detectedAccount
         }]);
         fetchRecords();
-        responseText = `I've successfully logged this expense for R${extractedAmount.toLocaleString()} into your ledger under Paisa Account!`;
+        responseText = `I've successfully logged this expense for R${extractedAmount.toLocaleString()} into your ledger under ${detectedAccount}!`;
       } else {
         responseText = `I noticed you mentioned a purchase, but could you please specify the amount (e.g., "coffee for R41.40") so I can log it accurately?`;
       }
@@ -271,7 +324,7 @@ export default function AppShell() {
               </div>
             </div>
 
-            {/* Loan & Debt Payoff Tracker Section Restored */}
+            {/* Loan & Debt Payoff Tracker Section */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
                 <div>
@@ -555,6 +608,13 @@ export default function AppShell() {
                 )}
               </div>
 
+              {recordType === 'loan' && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Counterparty (Lender / Borrower Name)</label>
+                  <input type="text" value={counterparty} onChange={(e) => setCounterparty(e.target.value)} placeholder="e.g. Lesy or Terry" className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Amount</label>
@@ -571,12 +631,22 @@ export default function AppShell() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Description / Quotation Title</label>
-                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Roofing Materials & Labour" className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Description / Title</label>
+                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Loan principal or Roofing Materials" className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
+              </div>
+
+              {/* Account / Source Selector for Capture Form */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Account / Source</label>
+                <select value={paidFrom} onChange={(e) => setPaidFrom(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm bg-white">
+                  {accountsList.map((acc, idx) => (
+                    <option key={idx} value={acc}>{acc}</option>
+                  ))}
+                </select>
               </div>
 
               <button type="submit" className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-sm transition">
-                Save Quotation Milestone
+                Save Record
               </button>
             </form>
           </div>
@@ -592,7 +662,7 @@ export default function AppShell() {
               ))}
             </div>
             <form onSubmit={handleAskJude} className="p-4 border-t bg-white flex space-x-3">
-              <input type="text" value={askInput} onChange={(e) => setAskInput(e.target.value)} placeholder="Ask e.g. 'Bought coffee for R41.40'" className="flex-1 px-4 py-3 rounded-xl border text-sm" />
+              <input type="text" value={askInput} onChange={(e) => setAskInput(e.target.value)} placeholder="Ask e.g. 'paid loan Lesy R520 Paisa'" className="flex-1 px-4 py-3 rounded-xl border text-sm" />
               <button type="submit" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl">Ask</button>
             </form>
           </div>
