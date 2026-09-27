@@ -130,6 +130,10 @@ export default function AppShell() {
     .filter(r => r.type === 'expense')
     .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
+  const totalInflows = transactionsList
+    .filter(r => r.type === 'income')
+    .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+
   const farmOverhead = transactionsList
     .filter(r => r.category?.includes('Infrastructure') || r.category?.includes('Farm'))
     .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
@@ -137,6 +141,17 @@ export default function AppShell() {
   const householdLiving = transactionsList
     .filter(r => r.category === 'Household' || r.category === 'Groceries')
     .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+
+  // Calculate Live Account Balances
+  const accountsList = ['Paisa Account', 'Absa Account', "Lynne's Mukuru Account", 'Your Mukuru Account (Joint Savings)'];
+  const accountBalances = accountsList.map(accName => {
+    const accTxs = transactionsList.filter(t => t.paid_from === accName);
+    const balance = accTxs.reduce((sum, t) => {
+      const val = parseFloat(t.amount) || 0;
+      return t.type === 'income' ? sum + val : sum - val;
+    }, 0);
+    return { name: accName, balance };
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans text-gray-900">
@@ -232,12 +247,35 @@ export default function AppShell() {
         {/* MONEY DASHBOARD TAB */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
+            {/* Live Accounts Overview */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Account Balances</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {accountBalances.map((acc, idx) => (
+                  <div key={idx} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                    <p className="text-xs font-semibold text-gray-500 truncate">{acc.name}</p>
+                    <h4 className={`text-xl font-black mt-1 ${acc.balance >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
+                      R{acc.balance.toLocaleString()}
+                    </h4>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Quick Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Outflows</p>
-                <h3 className="text-2xl font-black text-gray-900 mt-1">R{totalExpenses.toLocaleString()}</h3>
-                <p className="text-xs text-gray-500 mt-1">25th-to-25th Billing Cycle</p>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Inflows</p>
+                    <h3 className="text-2xl font-black text-emerald-600 mt-1">R{totalInflows.toLocaleString()}</h3>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Outflows</p>
+                    <h3 className="text-2xl font-black text-gray-900 mt-1">R{totalExpenses.toLocaleString()}</h3>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-3">25th-to-25th Billing Cycle</p>
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Household Living</p>
@@ -275,11 +313,33 @@ export default function AppShell() {
                       const paymentVal = parseFloat(paymentStr);
                       if (isNaN(paymentVal) || paymentVal <= 0) return;
 
+                      const accountChoice = prompt("Which account was this paid from?\n1. Paisa Account\n2. Absa Account\n3. Lynne's Mukuru Account\n4. Your Mukuru Account (Joint Savings)", "Paisa Account");
+                      if (!accountChoice) return;
+
+                      let selectedAccount = "Paisa Account";
+                      if (accountChoice === "2" || accountChoice.toLowerCase().includes("absa")) selectedAccount = "Absa Account";
+                      else if (accountChoice === "3" || accountChoice.toLowerCase().includes("lynne")) selectedAccount = "Lynne's Mukuru Account";
+                      else if (accountChoice === "4" || accountChoice.toLowerCase().includes("joint")) selectedAccount = "Your Mukuru Account (Joint Savings)";
+
                       const newRepaidTotal = repaidAmt + paymentVal;
+                      
+                      // Update loan repaid amount
                       const { error } = await supabase
                         .from('transactions')
                         .update({ repaid_amount: newRepaidTotal })
                         .eq('id', loan.id);
+
+                      // Also log the repayment transaction in the ledger for account balance tracking
+                      await supabase.from('transactions').insert([{
+                        household_id: 'default-household',
+                        record_type: 'transaction',
+                        type: 'expense',
+                        category: 'Loan Repayment',
+                        amount: paymentVal,
+                        currency: loan.currency || 'ZAR',
+                        description: `Repayment for ${loan.description} (${loan.counterparty})`,
+                        paid_from: selectedAccount
+                      }]);
 
                       if (!error) {
                         fetchRecords();
@@ -361,8 +421,8 @@ export default function AppShell() {
                           <td className="px-6 py-4 font-medium text-gray-900">{tx.description}</td>
                           <td className="px-6 py-4 text-gray-600">{tx.category}</td>
                           <td className="px-6 py-4 text-gray-600">{tx.paid_from}</td>
-                          <td className="px-6 py-4 font-bold text-gray-900">
-                            {tx.currency === 'EUR' ? '€' : tx.currency === 'USD' ? '$' : 'R'}{parseFloat(tx.amount).toLocaleString()}
+                          <td className={`px-6 py-4 font-bold ${tx.type === 'income' ? 'text-emerald-600' : 'text-gray-900'}`}>
+                            {tx.type === 'income' ? '+' : '-'}{tx.currency === 'EUR' ? '€' : tx.currency === 'USD' ? '$' : 'R'}{parseFloat(tx.amount).toLocaleString()}
                           </td>
                           <td className="px-6 py-4 text-right">
                             <button onClick={() => handleDeleteRecord(tx.id)} className="text-xs text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-lg transition">Delete</button>
@@ -449,6 +509,7 @@ export default function AppShell() {
                     <option value="Groceries">Groceries</option>
                     <option value="Transport">Transport & Fuel</option>
                     <option value="Overheads">Recurring Overheads</option>
+                    <option value="Personal">Personal / Tips</option>
                   </select>
                 </div>
               )}
