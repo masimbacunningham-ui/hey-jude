@@ -70,7 +70,7 @@ export default function AppShell() {
       setMilestoneStatus('Planned');
       setTargetPhase('Phase 3: Residential & Utilities Setup');
       setDescription('Roofing Materials & Labour (Roof A & B Consolidated)');
-      setScanMessage('Successfully extracted quotation total: $1,583.75 USD');
+      setScanMessage('Successfully extracted quotation total: $1,583.75 USD (Saved as unallocated quotation)');
     }, 1200);
   };
 
@@ -173,8 +173,9 @@ export default function AppShell() {
     .filter(r => r.type === 'income')
     .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
-  const farmOverhead = records
-    .filter(r => r.category?.includes('Phase') || r.description?.toLowerCase().includes('farm'))
+  // Farm Dev calculates strictly actual ZAR funds paid/transferred toward farm phases
+  const farmOverhead = transactionsList
+    .filter(r => r.type === 'expense' && r.category?.includes('Phase'))
     .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
   const householdLiving = transactionsList
@@ -266,7 +267,7 @@ export default function AppShell() {
                 <h3 className="text-2xl font-black text-blue-600 mt-1">R{householdLiving.toLocaleString()}</h3>
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Mahusekwa Farm Dev</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Mahusekwa Farm Dev (Paid ZAR)</p>
                 <h3 className="text-2xl font-black text-emerald-600 mt-1">R{farmOverhead.toLocaleString()}</h3>
               </div>
             </div>
@@ -468,7 +469,7 @@ export default function AppShell() {
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Amount</label>
-                  <input type="number" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
+                  <input type="number" step="any" value5={amount} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Currency</label>
