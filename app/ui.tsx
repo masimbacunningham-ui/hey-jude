@@ -8,7 +8,7 @@ const supabaseAnonKey = 'sb_publishable_tvzTzSsQ8rsMHP6esPI1pg_r9_L4g6n';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function AppShell() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'capture' | 'askjude'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'zimbabwe' | 'capture' | 'askjude'>('home');
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -152,18 +152,34 @@ export default function AppShell() {
               <p className="text-xs text-gray-500">Executive Financial Intelligence</p>
             </div>
           </div>
-          <nav className="flex space-x-2">
+          <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto py-2">
+            <button
+              onClick={() => setActiveTab('home')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
+                activeTab === 'home' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Home
+            </button>
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
                 activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               Money Dashboard
             </button>
             <button
+              onClick={() => setActiveTab('zimbabwe')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
+                activeTab === 'zimbabwe' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Mahusekwa / Zim
+            </button>
+            <button
               onClick={() => setActiveTab('capture')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
                 activeTab === 'capture' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -171,7 +187,7 @@ export default function AppShell() {
             </button>
             <button
               onClick={() => setActiveTab('askjude')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
                 activeTab === 'askjude' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -184,7 +200,36 @@ export default function AppShell() {
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-8">
         
-        {/* DASHBOARD TAB */}
+        {/* HOME TAB */}
+        {activeTab === 'home' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-8 rounded-2xl shadow-sm">
+              <h2 className="text-2xl font-black">Welcome back, Cunningham</h2>
+              <p className="text-blue-100 mt-2 text-sm max-w-2xl">
+                Your executive financial hub and Mahusekwa farm development command center. Track your cash flows, manage loan repayments, and oversee off-grid infrastructure seamlessly.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                <h3 className="font-bold text-gray-900 mb-1">Money Dashboard</h3>
+                <p className="text-xs text-gray-500 mb-4">View account balances, ledger history, and active loan repayment progress bars.</p>
+                <button onClick={() => setActiveTab('dashboard')} className="text-xs bg-blue-50 text-blue-700 font-semibold px-3.5 py-2 rounded-xl hover:bg-blue-100 transition">Open Dashboard →</button>
+              </div>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                <h3 className="font-bold text-gray-900 mb-1">Mahusekwa Farm Project</h3>
+                <p className="text-xs text-gray-500 mb-4">Review agricultural capital allocations, greenhouse setup, and infrastructure phases.</p>
+                <button onClick={() => setActiveTab('zimbabwe')} className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-3.5 py-2 rounded-xl hover:bg-emerald-100 transition">View Zim Farm →</button>
+              </div>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                <h3 className="font-bold text-gray-900 mb-1">Ask Jude AI</h3>
+                <p className="text-xs text-gray-500 mb-4">Query your transactions in plain language for instant financial intelligence.</p>
+                <button onClick={() => setActiveTab('askjude')} className="text-xs bg-gray-100 text-gray-700 font-semibold px-3.5 py-2 rounded-xl hover:bg-gray-200 transition">Start Chat →</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MONEY DASHBOARD TAB */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
             {/* Quick Metrics */}
@@ -328,6 +373,37 @@ export default function AppShell() {
                   </table>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* MAHUSEKWA / ZIMBABWE TAB */}
+        {activeTab === 'zimbabwe' && (
+          <div className="space-y-6">
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Mahusekwa Farm Development (Mashonaland East)</h2>
+              <p className="text-sm text-gray-500 mb-6">Greenfield agricultural plot operations, protected greenhouses, and swine/poultry infrastructure.</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-6 bg-gray-50 rounded-xl border border-gray-100">
+                  <h4 className="font-bold text-gray-900 text-sm mb-2">Infrastructure & Construction</h4>
+                  <ul className="text-xs text-gray-600 space-y-2">
+                    <li>• 5,000 square meter plot layout and perimeter fencing</li>
+                    <li>• Two-bedroom residential building roofing and finishes</li>
+                    <li>• Protected greenhouse tunnels & automated irrigation</li>
+                    <li>• Off-grid solar power and water borehole setup</li>
+                  </ul>
+                </div>
+                <div className="p-6 bg-gray-50 rounded-xl border border-gray-100">
+                  <h4 className="font-bold text-gray-900 text-sm mb-2">Agricultural Operations</h4>
+                  <ul className="text-xs text-gray-600 space-y-2">
+                    <li>• Integrated horticulture and crop production</li>
+                    <li>• Broiler chicken poultry units</li>
+                    <li>• Swine production (piggery infrastructure)</li>
+                    <li>• On-site farm management & logistics</li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         )}
