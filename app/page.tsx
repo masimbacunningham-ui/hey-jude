@@ -1,5 +1,5 @@
-import AppShell from "./ui";
+import AppShell from './ui';
 
-export default function Home() {
+export default function Page() {
   return <AppShell />;
 }
