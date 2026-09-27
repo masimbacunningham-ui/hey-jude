@@ -17,7 +17,7 @@ export default function AppShell() {
   const [type, setType] = useState<'expense' | 'income'>('expense');
   const [category, setCategory] = useState('Household');
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState('ZAR');
   const [description, setDescription] = useState('');
   const [paidFrom, setPaidFrom] = useState('Paisa Account');
   const [loanType, setLoanType] = useState<'borrowed' | 'lent'>('borrowed');
@@ -101,13 +101,13 @@ export default function AppShell() {
     const { error } = await supabase.from('transactions').insert([payload]);
 
     if (!error) {
-      alert('Successfully recorded quotation milestone!');
+      alert('Successfully recorded!');
       setAmount('');
       setDescription('');
       setCounterparty('');
       setScanMessage('');
       fetchRecords();
-      setActiveTab('zimbabwe');
+      setActiveTab('dashboard');
     } else {
       alert('Error saving record: ' + error.message);
     }
@@ -173,7 +173,6 @@ export default function AppShell() {
     .filter(r => r.type === 'income')
     .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
-  // Farm Dev calculates strictly actual ZAR funds paid/transferred toward farm phases
   const farmOverhead = transactionsList
     .filter(r => r.type === 'expense' && r.category?.includes('Phase'))
     .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
@@ -272,6 +271,99 @@ export default function AppShell() {
               </div>
             </div>
 
+            {/* Loan & Debt Payoff Tracker Section Restored */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                <div>
+                  <h3 className="font-bold text-gray-900">Loan & Debt Payoff Tracker</h3>
+                  <p className="text-xs text-gray-500">Monitor borrowed funds, lent amounts, and partial repayment progress.</p>
+                </div>
+              </div>
+              {loansList.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 text-sm">No active loans logged. Use the Capture tab to add a loan!</div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {loansList.map((loan) => {
+                    const totalLoanAmt = parseFloat(loan.amount) || 0;
+                    const repaidAmt = parseFloat(loan.repaid_amount) || 0;
+                    const remainingAmt = Math.max(0, totalLoanAmt - repaidAmt);
+                    const progressPct = totalLoanAmt > 0 ? Math.min(100, Math.round((repaidAmt / totalLoanAmt) * 100)) : 0;
+
+                    const handleAddRepayment = async () => {
+                      const paymentStr = prompt(`Enter repayment amount for ${loan.description} (${loan.currency || 'ZAR'}):`, "100");
+                      if (!paymentStr) return;
+                      const paymentVal = parseFloat(paymentStr);
+                      if (isNaN(paymentVal) || paymentVal <= 0) return;
+
+                      const accountChoice = prompt("Which account was this paid from?\n1. Paisa Account\n2. Absa Account\n3. Lynne's Mukuru Account\n4. Your Mukuru Account (Joint Savings)", "1");
+                      if (!accountChoice) return;
+
+                      let selectedAccount = "Paisa Account";
+                      if (accountChoice === "2" || accountChoice.toLowerCase().includes("absa")) selectedAccount = "Absa Account";
+                      else if (accountChoice === "3" || accountChoice.toLowerCase().includes("lynne")) selectedAccount = "Lynne's Mukuru Account";
+                      else if (accountChoice === "4" || accountChoice.toLowerCase().includes("joint")) selectedAccount = "Your Mukuru Account (Joint Savings)";
+
+                      const newRepaidTotal = repaidAmt + paymentVal;
+                      
+                      await supabase
+                        .from('transactions')
+                        .update({ repaid_amount: newRepaidTotal })
+                        .eq('id', loan.id);
+
+                      await supabase.from('transactions').insert([{
+                        household_id: 'default-household',
+                        record_type: 'transaction',
+                        type: 'expense',
+                        category: 'Loan Repayment',
+                        amount: paymentVal,
+                        currency: loan.currency || 'ZAR',
+                        description: `Repayment for ${loan.description} (${loan.counterparty})`,
+                        paid_from: selectedAccount
+                      }]);
+
+                      fetchRecords();
+                    };
+
+                    return (
+                      <div key={loan.id} className="p-6 space-y-4">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className={`text-xs px-2 py-0.5 rounded font-semibold uppercase ${loan.type === 'borrowed' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                {loan.type}
+                              </span>
+                              <span className="text-xs text-gray-500">Counterparty: {loan.counterparty}</span>
+                            </div>
+                            <p className="text-sm font-bold text-gray-900 mt-1">{loan.description}</p>
+                          </div>
+                          <div className="text-right flex items-center space-x-4">
+                            <div>
+                              <span className="text-sm font-extrabold text-gray-900">
+                                Total: {loan.currency === 'EUR' ? '€' : loan.currency === 'USD' ? '$' : 'R'}{totalLoanAmt.toLocaleString()}
+                              </span>
+                              <p className="text-xs text-emerald-600 font-semibold">Repaid: {loan.currency === 'EUR' ? '€' : loan.currency === 'USD' ? '$' : 'R'}{repaidAmt.toLocaleString()}</p>
+                            </div>
+                            <button onClick={handleAddRepayment} className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold px-3.5 py-2 rounded-xl transition border border-emerald-200 shadow-sm">+ Log Repayment</button>
+                            <button onClick={() => handleDeleteRecord(loan.id)} className="text-xs bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 px-3 py-2 rounded-xl transition">Delete</button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs font-medium text-gray-600">
+                            <span>Progress: {progressPct}% Paid Back</span>
+                            <span>Remaining Balance: {loan.currency === 'EUR' ? '€' : loan.currency === 'USD' ? '$' : 'R'}{remainingAmt.toLocaleString()}</span>
+                          </div>
+                          <div className="w-full bg-gray-100 h-3 rounded-full overflow-hidden">
+                            <div className="bg-emerald-500 h-3 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100"><h3 className="font-bold text-gray-900">Ledger & Transaction History</h3></div>
               <div className="overflow-x-auto">
@@ -313,14 +405,11 @@ export default function AppShell() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {phasesConfig.map((phase) => {
                   const phaseMilestones = milestonesList.filter(m => m.category === phase.name);
-                  
                   const totalPhaseBudget = phaseMilestones.reduce((sum, m) => sum + (parseFloat(m.amount) || 0), 0);
-                  
                   const totalPhaseFunded = phaseMilestones.reduce((sum, m) => {
                     const match = m.description?.match(/FundedUSD:\s*([\d.]+)/);
                     return sum + (match ? parseFloat(match[1]) : 0);
                   }, 0);
-
                   const phaseProgressPct = totalPhaseBudget > 0 ? Math.min(100, Math.round((totalPhaseFunded / totalPhaseBudget) * 100)) : 0;
 
                   const handleFundMilestone = async (milestone: any) => {
@@ -469,7 +558,7 @@ export default function AppShell() {
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Amount</label>
-                  <input type="number" step="any" value5={amount} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
+                  <input type="number" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Currency</label>
