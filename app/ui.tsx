@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -12,6 +11,16 @@ export default function AppShell() {
   const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'zimbabwe' | 'capture' | 'askjude'>('home');
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Phase Progress State for Milestone Tracking
+  const [phaseProgress, setPhaseProgress] = useState<{ [key: number]: number }>({
+    1: 100, // Phase 1: Site Acquisition & Survey
+    2: 75,  // Phase 2: Perimeter & Security Infrastructure
+    3: 45,  // Phase 3: Residential & Utilities Setup
+    4: 15,  // Phase 4: Greenhouse Tunnels & Horticulture
+    5: 0,   // Phase 5: Poultry & Broiler Units
+    6: 0    // Phase 6: Piggery & Integrated Swine Production
+  });
 
   // Capture Form State
   const [recordType, setRecordType] = useState<'transaction' | 'loan'>('transaction');
@@ -124,6 +133,17 @@ export default function AppShell() {
     setChatLog((prev) => [...prev, { sender: 'jude', text: responseText }]);
   };
 
+  const updatePhaseProgress = (phaseNum: number) => {
+    const val = prompt(`Enter progress percentage for Phase ${phaseNum} (0 to 100):`, phaseProgress[phaseNum].toString());
+    if (val === null) return;
+    const num = parseInt(val);
+    if (!isNaN(num) && num >= 0 && num <= 100) {
+      setPhaseProgress(prev => ({ ...prev, [phaseNum]: num }));
+    } else {
+      alert("Please enter a valid number between 0 and 100.");
+    }
+  };
+
   const loansList = records.filter(r => r.record_type === 'loan');
   const transactionsList = records.filter(r => r.record_type === 'transaction');
 
@@ -233,7 +253,7 @@ export default function AppShell() {
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-gray-900 mb-1">Mahusekwa Farm Project</h3>
-                <p className="text-xs text-gray-500 mb-4">Review agricultural capital allocations, the 6 development phases, and milestone tracking.</p>
+                <p className="text-xs text-gray-500 mb-4">Review agricultural capital allocations, the 6 development phases, and milestone tracking bars.</p>
                 <button onClick={() => setActiveTab('zimbabwe')} className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-3.5 py-2 rounded-xl hover:bg-emerald-100 transition">View Zim Farm →</button>
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -436,76 +456,62 @@ export default function AppShell() {
           </div>
         )}
 
-        {/* MAHUSEKWA / ZIMBABWE TAB (Restored with 6 Phases & Milestones) */}
+        {/* MAHUSEKWA / ZIMBABWE TAB (Full 6 Phases & Milestone Progress Tracking) */}
         {activeTab === 'zimbabwe' && (
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Mahusekwa Farm Development (Mashonaland East)</h2>
-              <p className="text-sm text-gray-500 mb-6">Greenfield agricultural plot operations (5,000 sqm), protected greenhouses, and livestock integration.</p>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Mahusekwa Farm Development (Mashonaland East)</h2>
+                  <p className="text-sm text-gray-500">Greenfield agricultural plot operations (5,000 sqm), protected greenhouses, and livestock integration.</p>
+                </div>
+              </div>
               
               <div className="space-y-6">
-                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Project Phases & Milestone Tracker</h3>
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Project Phases & Milestone Progress Tracker</h3>
+                  <span className="text-xs text-gray-500">Click "Update %" on any phase to adjust milestone completion</span>
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Phase 1 */}
-                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 1</span>
-                      <span className="text-xs text-emerald-600 font-semibold">Completed</span>
-                    </div>
-                    <h4 className="font-bold text-gray-900 text-sm">Site Acquisition & Survey</h4>
-                    <p className="text-xs text-gray-600">Plot demarcations, initial land clearing, and title verification on 5,000 sqm greenfield plot.</p>
-                  </div>
+                  {[
+                    { num: 1, title: "Site Acquisition & Survey", desc: "Plot demarcations, initial land clearing, and title verification on 5,000 sqm greenfield plot." },
+                    { num: 2, title: "Perimeter & Security Infrastructure", desc: "Boundary fencing, secure gate installation, and vehicle access pathway development." },
+                    { num: 3, title: "Residential & Utilities Setup", desc: "Two-bedroom residential building roofing and interior finishes, borehole water system, and solar power setup." },
+                    { num: 4, title: "Greenhouse Tunnels & Horticulture", desc: "Protected greenhouse tunnel construction, drip irrigation systems, and commercial crop plantation." },
+                    { num: 5, title: "Poultry & Broiler Units", desc: "Construction of broiler chicken housing, feeding systems, and bio-security protocols." },
+                    { num: 6, title: "Piggery & Integrated Swine Production", desc: "Swine production pens, waste management integration, and full commercial scaling under farm management." }
+                  ].map((phase) => {
+                    const p = phaseProgress[phase.num];
+                    return (
+                      <div key={phase.num} className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-4 flex flex-col justify-between">
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase {phase.num}</span>
+                            <button 
+                              onClick={() => updatePhaseProgress(phase.num)}
+                              className="text-xs bg-white hover:bg-gray-100 text-blue-600 font-semibold px-2.5 py-1 rounded-lg border border-gray-200 transition shadow-sm"
+                            >
+                              Update %
+                            </button>
+                          </div>
+                          <h4 className="font-bold text-gray-900 text-sm">{phase.title}</h4>
+                          <p className="text-xs text-gray-600">{phase.desc}</p>
+                        </div>
 
-                  {/* Phase 2 */}
-                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 2</span>
-                      <span className="text-xs text-amber-600 font-semibold">In Progress</span>
-                    </div>
-                    <h4 className="font-bold text-gray-900 text-sm">Perimeter & Security Infrastructure</h4>
-                    <p className="text-xs text-gray-600">Boundary fencing, secure gate installation, and vehicle access pathway development.</p>
-                  </div>
-
-                  {/* Phase 3 */}
-                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 3</span>
-                      <span className="text-xs text-amber-600 font-semibold">Active Development</span>
-                    </div>
-                    <h4 className="font-bold text-gray-900 text-sm">Residential & Utilities Setup</h4>
-                    <p className="text-xs text-gray-600">Two-bedroom residential building roofing and interior finishes, borehole water system, and solar power setup.</p>
-                  </div>
-
-                  {/* Phase 4 */}
-                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 4</span>
-                      <span className="text-xs text-gray-400 font-semibold">Planned</span>
-                    </div>
-                    <h4 className="font-bold text-gray-900 text-sm">Greenhouse Tunnels & Horticulture</h4>
-                    <p className="text-xs text-gray-600">Protected greenhouse tunnel construction, drip irrigation systems, and commercial crop plantation.</p>
-                  </div>
-
-                  {/* Phase 5 */}
-                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 5</span>
-                      <span className="text-xs text-gray-400 font-semibold">Planned</span>
-                    </div>
-                    <h4 className="font-bold text-gray-900 text-sm">Poultry & Broiler Units</h4>
-                    <p className="text-xs text-gray-600">Construction of broiler chicken housing, feeding systems, and bio-security protocols.</p>
-                  </div>
-
-                  {/* Phase 6 */}
-                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 6</span>
-                      <span className="text-xs text-gray-400 font-semibold">Planned</span>
-                    </div>
-                    <h4 className="font-bold text-gray-900 text-sm">Piggery & Integrated Swine Production</h4>
-                    <p className="text-xs text-gray-600">Swine production pens, waste management integration, and full commercial scaling under farm management.</p>
-                  </div>
+                        {/* Milestone Progress Bar */}
+                        <div className="space-y-1.5 pt-2 border-t border-gray-200/60">
+                          <div className="flex justify-between text-xs font-semibold text-gray-600">
+                            <span>Milestone Progress</span>
+                            <span className="text-blue-600 font-bold">{p}% Completed</span>
+                          </div>
+                          <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
+                            <div className="bg-blue-600 h-3 rounded-full transition-all duration-500" style={{ width: `${p}%` }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
