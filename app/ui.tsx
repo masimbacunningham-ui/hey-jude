@@ -315,7 +315,6 @@ export default function AppShell() {
                   
                   const totalPhaseBudget = phaseMilestones.reduce((sum, m) => sum + (parseFloat(m.amount) || 0), 0);
                   
-                  // Extract funded USD from description tag [FundedUSD: X]
                   const totalPhaseFunded = phaseMilestones.reduce((sum, m) => {
                     const match = m.description?.match(/FundedUSD:\s*([\d.]+)/);
                     return sum + (match ? parseFloat(match[1]) : 0);
@@ -352,14 +351,12 @@ export default function AppShell() {
                     const totalZarCost = (payUsd * rate) + fee;
                     const newFundedUsd = currentFunded + payUsd;
 
-                    // Update milestone description with new FundedUSD tracker
                     const baseDesc = milestone.description.replace(/\[Milestone:.*?\]\s*/, '').replace(/\[FundedUSD:.*?\]\s*/, '');
                     const newStatus = newFundedUsd >= parseFloat(milestone.amount) ? 'Completed' : 'In Progress';
                     const updatedDesc = `[Milestone: ${newStatus} | FundedUSD: ${newFundedUsd}] ${baseDesc}`;
 
                     await supabase.from('transactions').update({ description: updatedDesc }).eq('id', milestone.id);
 
-                    // Log the ZAR cash outflow transaction against the bank account
                     await supabase.from('transactions').insert([{
                       household_id: 'default-household',
                       record_type: 'transaction',
@@ -421,7 +418,7 @@ export default function AppShell() {
 
                       <div className="pt-3 border-t border-gray-200/60 space-y-1.5">
                         <div className="flex justify-between text-xs font-semibold text-gray-600">
-                          <span>Progress ({phaseProgress}% Funded)</span>
+                          <span>Progress ({phaseProgressPct}% Funded)</span>
                           <span className="text-blue-600 font-bold">${totalPhaseFunded.toLocaleString()} /${totalPhaseBudget.toLocaleString()} USD</span>
                         </div>
                         <div className="w-full bg-gray-200 h-3 rounded-full overflow-hidden">
