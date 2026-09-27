@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -232,7 +233,7 @@ export default function AppShell() {
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-gray-900 mb-1">Mahusekwa Farm Project</h3>
-                <p className="text-xs text-gray-500 mb-4">Review agricultural capital allocations, greenhouse setup, and infrastructure phases.</p>
+                <p className="text-xs text-gray-500 mb-4">Review agricultural capital allocations, the 6 development phases, and milestone tracking.</p>
                 <button onClick={() => setActiveTab('zimbabwe')} className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-3.5 py-2 rounded-xl hover:bg-emerald-100 transition">View Zim Farm →</button>
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -323,13 +324,11 @@ export default function AppShell() {
 
                       const newRepaidTotal = repaidAmt + paymentVal;
                       
-                      // Update loan repaid amount
                       const { error } = await supabase
                         .from('transactions')
                         .update({ repaid_amount: newRepaidTotal })
                         .eq('id', loan.id);
 
-                      // Also log the repayment transaction in the ledger for account balance tracking
                       await supabase.from('transactions').insert([{
                         household_id: 'default-household',
                         record_type: 'transaction',
@@ -437,31 +436,76 @@ export default function AppShell() {
           </div>
         )}
 
-        {/* MAHUSEKWA / ZIMBABWE TAB */}
+        {/* MAHUSEKWA / ZIMBABWE TAB (Restored with 6 Phases & Milestones) */}
         {activeTab === 'zimbabwe' && (
           <div className="space-y-6">
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
               <h2 className="text-xl font-bold text-gray-900 mb-2">Mahusekwa Farm Development (Mashonaland East)</h2>
-              <p className="text-sm text-gray-500 mb-6">Greenfield agricultural plot operations, protected greenhouses, and swine/poultry infrastructure.</p>
+              <p className="text-sm text-gray-500 mb-6">Greenfield agricultural plot operations (5,000 sqm), protected greenhouses, and livestock integration.</p>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-6 bg-gray-50 rounded-xl border border-gray-100">
-                  <h4 className="font-bold text-gray-900 text-sm mb-2">Infrastructure & Construction</h4>
-                  <ul className="text-xs text-gray-600 space-y-2">
-                    <li>• 5,000 square meter plot layout and perimeter fencing</li>
-                    <li>• Two-bedroom residential building roofing and finishes</li>
-                    <li>• Protected greenhouse tunnels & automated irrigation</li>
-                    <li>• Off-grid solar power and water borehole setup</li>
-                  </ul>
-                </div>
-                <div className="p-6 bg-gray-50 rounded-xl border border-gray-100">
-                  <h4 className="font-bold text-gray-900 text-sm mb-2">Agricultural Operations</h4>
-                  <ul className="text-xs text-gray-600 space-y-2">
-                    <li>• Integrated horticulture and crop production</li>
-                    <li>• Broiler chicken poultry units</li>
-                    <li>• Swine production (piggery infrastructure)</li>
-                    <li>• On-site farm management & logistics</li>
-                  </ul>
+              <div className="space-y-6">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Project Phases & Milestone Tracker</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Phase 1 */}
+                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 1</span>
+                      <span className="text-xs text-emerald-600 font-semibold">Completed</span>
+                    </div>
+                    <h4 className="font-bold text-gray-900 text-sm">Site Acquisition & Survey</h4>
+                    <p className="text-xs text-gray-600">Plot demarcations, initial land clearing, and title verification on 5,000 sqm greenfield plot.</p>
+                  </div>
+
+                  {/* Phase 2 */}
+                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 2</span>
+                      <span className="text-xs text-amber-600 font-semibold">In Progress</span>
+                    </div>
+                    <h4 className="font-bold text-gray-900 text-sm">Perimeter & Security Infrastructure</h4>
+                    <p className="text-xs text-gray-600">Boundary fencing, secure gate installation, and vehicle access pathway development.</p>
+                  </div>
+
+                  {/* Phase 3 */}
+                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 3</span>
+                      <span className="text-xs text-amber-600 font-semibold">Active Development</span>
+                    </div>
+                    <h4 className="font-bold text-gray-900 text-sm">Residential & Utilities Setup</h4>
+                    <p className="text-xs text-gray-600">Two-bedroom residential building roofing and interior finishes, borehole water system, and solar power setup.</p>
+                  </div>
+
+                  {/* Phase 4 */}
+                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 4</span>
+                      <span className="text-xs text-gray-400 font-semibold">Planned</span>
+                    </div>
+                    <h4 className="font-bold text-gray-900 text-sm">Greenhouse Tunnels & Horticulture</h4>
+                    <p className="text-xs text-gray-600">Protected greenhouse tunnel construction, drip irrigation systems, and commercial crop plantation.</p>
+                  </div>
+
+                  {/* Phase 5 */}
+                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 5</span>
+                      <span className="text-xs text-gray-400 font-semibold">Planned</span>
+                    </div>
+                    <h4 className="font-bold text-gray-900 text-sm">Poultry & Broiler Units</h4>
+                    <p className="text-xs text-gray-600">Construction of broiler chicken housing, feeding systems, and bio-security protocols.</p>
+                  </div>
+
+                  {/* Phase 6 */}
+                  <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">Phase 6</span>
+                      <span className="text-xs text-gray-400 font-semibold">Planned</span>
+                    </div>
+                    <h4 className="font-bold text-gray-900 text-sm">Piggery & Integrated Swine Production</h4>
+                    <p className="text-xs text-gray-600">Swine production pens, waste management integration, and full commercial scaling under farm management.</p>
+                  </div>
                 </div>
               </div>
             </div>
