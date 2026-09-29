@@ -13,13 +13,14 @@ export default function AppShell() {
   const [loading, setLoading] = useState(true);
 
   // Capture Form State
-  const [recordType, setRecordType] = useState<'transaction' | 'loan' | 'milestone'>('transaction');
+  const [recordType, setRecordType] = useState<'transaction' | 'loan' | 'milestone' | 'transfer'>('transaction');
   const [type, setType] = useState<'expense' | 'income'>('expense');
   const [category, setCategory] = useState('Household');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('ZAR');
   const [description, setDescription] = useState('');
   const [paidFrom, setPaidFrom] = useState('Paisa Account');
+  const [transferTo, setTransferTo] = useState('Your Mukuru Account (Joint Savings)');
   const [loanType, setLoanType] = useState<'borrowed' | 'lent'>('borrowed');
   const [counterparty, setCounterparty] = useState('');
 
@@ -81,6 +82,50 @@ export default function AppShell() {
       return;
     }
 
+    if (recordType === 'transfer') {
+      if (paidFrom === transferTo) {
+        alert('Source and destination accounts cannot be the same.');
+        return;
+      }
+
+      // Log Outflow from source account
+      const outflowPayload = {
+        household_id: 'default-household',
+        record_type: 'transaction',
+        type: 'expense',
+        category: 'Transfer',
+        amount: parseFloat(amount),
+        currency: currency,
+        description: `Transfer to ${transferTo}: ${description}`,
+        paid_from: paidFrom
+      };
+
+      // Log Inflow to destination account
+      const inflowPayload = {
+        household_id: 'default-household',
+        record_type: 'transaction',
+        type: 'income',
+        category: 'Transfer',
+        amount: parseFloat(amount),
+        currency: currency,
+        description: `Transfer from ${paidFrom}: ${description}`,
+        paid_from: transferTo
+      };
+
+      const { error } = await supabase.from('transactions').insert([outflowPayload, inflowPayload]);
+
+      if (!error) {
+        alert('Transfer completed successfully!');
+        setAmount('');
+        setDescription('');
+        fetchRecords();
+        setActiveTab('dashboard');
+      } else {
+        alert('Error processing transfer: ' + error.message);
+      }
+      return;
+    }
+
     const formattedDescription = recordType === 'milestone' 
       ? `[Milestone: ${milestoneStatus} | Target: ${targetDate} | FundedUSD: 0] ${description}`
       : description;
@@ -123,7 +168,6 @@ export default function AppShell() {
     }
   };
 
-  // Enhanced Ask Jude AI Natural Language Processor with Smart Loan Repayment Logic
   const handleAskJude = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!askInput.trim()) return;
@@ -138,7 +182,6 @@ export default function AppShell() {
     const amountMatch = userQuery.match(/(?:r|zar|\$|€)?\s*(\d+(?:\.\d+)?)/i);
     const extractedAmount = amountMatch ? parseFloat(amountMatch[1]) : 0;
 
-    // Detect Account from query if mentioned
     let detectedAccount = 'Paisa Account';
     if (lower.includes('absa')) detectedAccount = 'Absa Account';
     else if (lower.includes('joint') || lower.includes('mukuru joint')) detectedAccount = 'Your Mukuru Account (Joint Savings)';
@@ -146,7 +189,6 @@ export default function AppShell() {
 
     if (lower.includes('loan') && (lower.includes('paid') || lower.includes('repay') || lower.includes('pay'))) {
       if (extractedAmount > 0) {
-        // Find matching loan by counterparty in user query
         const loansList = records.filter(r => r.record_type === 'loan');
         const matchedLoan = loansList.find(l => l.counterparty?.toLowerCase() && lower.includes(l.counterparty.toLowerCase()));
 
@@ -173,7 +215,6 @@ export default function AppShell() {
           fetchRecords();
           responseText = `Successfully logged R${extractedAmount.toLocaleString()} loan repayment for ${matchedLoan.counterparty} from ${detectedAccount}! Updated loan progress.`;
         } else {
-          // If no specific counterparty match, log as general loan repayment transaction
           await supabase.from('transactions').insert([{
             household_id: 'default-household',
             record_type: 'transaction',
@@ -219,11 +260,11 @@ export default function AppShell() {
   const transactionsList = records.filter(r => r.record_type === 'transaction' || !r.record_type);
 
   const totalExpenses = transactionsList
-    .filter(r => r.type === 'expense')
+    .filter(r => r.type === 'expense' && r.category !== 'Transfer')
     .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
   const totalInflows = transactionsList
-    .filter(r => r.type === 'income')
+    .filter(r => r.type === 'income' && r.category !== 'Transfer')
     .reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
 
   const farmOverhead = transactionsList
@@ -579,7 +620,7 @@ export default function AppShell() {
         {activeTab === 'capture' && (
           <div className="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Capture Entry & Quotation OCR</h2>
-            <p className="text-xs text-gray-500 mb-6">Upload quotation PDFs or receipts to log them as planned milestones without affecting bank balances until funded.</p>
+            <p className="text-xs text-gray-500 mb-6">Upload quotation PDFs, record transactions, log loans, or transfer funds between accounts.</p>
             
             <div className="mb-6 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-2">
               <label className="block text-xs font-bold text-blue-900 uppercase">Scan Quotation / Receipt</label>
@@ -596,6 +637,7 @@ export default function AppShell() {
                     <option value="transaction">Transaction (Expense/Income)</option>
                     <option value="loan">Loan / Borrowing</option>
                     <option value="milestone">Mahusekwa Milestone / Quotation</option>
+                    <option value="transfer">Transfer Between Accounts</option>
                   </select>
                 </div>
                 {recordType === 'milestone' && (
@@ -632,21 +674,33 @@ export default function AppShell() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Description / Title</label>
-                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Loan principal or Roofing Materials" className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
+                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={recordType === 'transfer' ? "e.g. Monthly top-up" : "e.g. Roofing Materials"} className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
               </div>
 
-              {/* Account / Source Selector for Capture Form */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Account / Source</label>
-                <select value={paidFrom} onChange={(e) => setPaidFrom(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm bg-white">
-                  {accountsList.map((acc, idx) => (
-                    <option key={idx} value={acc}>{acc}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">{recordType === 'transfer' ? 'Transfer From Account' : 'Account / Source'}</label>
+                  <select value={paidFrom} onChange={(e) => setPaidFrom(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm bg-white">
+                    {accountsList.map((acc, idx) => (
+                      <option key={idx} value={acc}>{acc}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {recordType === 'transfer' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Transfer To Account</label>
+                    <select value={transferTo} onChange={(e) => setTransferTo(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm bg-white">
+                      {accountsList.map((acc, idx) => (
+                        <option key={idx} value={acc}>{acc}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <button type="submit" className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-sm transition">
-                Save Record
+                {recordType === 'transfer' ? 'Complete Transfer' : 'Save Record'}
               </button>
             </form>
           </div>
