@@ -88,7 +88,6 @@ export default function AppShell() {
         return;
       }
 
-      // Log Outflow from source account
       const outflowPayload = {
         household_id: 'default-household',
         record_type: 'transaction',
@@ -100,7 +99,6 @@ export default function AppShell() {
         paid_from: paidFrom
       };
 
-      // Log Inflow to destination account
       const inflowPayload = {
         household_id: 'default-household',
         record_type: 'transaction',
@@ -640,6 +638,17 @@ export default function AppShell() {
                     <option value="transfer">Transfer Between Accounts</option>
                   </select>
                 </div>
+
+                {recordType === 'transaction' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Flow Type</label>
+                    <select value={type} onChange={(e) => setType(e.target.value as any)} className="w-full px-4 py-2.5 rounded-xl border text-sm bg-white">
+                      <option value="expense">Expense (-)</option>
+                      <option value="income">Income (+)</option>
+                    </select>
+                  </div>
+                )}
+
                 {recordType === 'milestone' && (
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Target Phase</label>
@@ -654,6 +663,20 @@ export default function AppShell() {
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Counterparty (Lender / Borrower Name)</label>
                   <input type="text" value={counterparty} onChange={(e) => setCounterparty(e.target.value)} placeholder="e.g. Lesy or Terry" className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
+                </div>
+              )}
+
+              {recordType === 'transaction' && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Category</label>
+                  <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm bg-white">
+                    <option value="Household">Household Living</option>
+                    <option value="Groceries">Groceries</option>
+                    <option value="Transport">Transport & Fuel</option>
+                    <option value="Overheads">Recurring Overheads</option>
+                    <option value="Personal">Personal / Tips</option>
+                    <option value="Income">General Income</option>
+                  </select>
                 </div>
               )}
 
@@ -674,7 +697,7 @@ export default function AppShell() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 uppercase mb-2">Description / Title</label>
-                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={recordType === 'transfer' ? "e.g. Monthly top-up" : "e.g. Roofing Materials"} className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
+                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={recordType === 'transfer' ? "e.g. Monthly top-up" : "e.g. Income or Roofing Materials"} className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
